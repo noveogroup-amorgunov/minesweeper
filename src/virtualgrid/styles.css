@@ -1,0 +1,16 @@
+.virtual-grid {
+    overflow: auto;
+    contain: content;
+}
+
+.virtual-grid__viewport {
+    overflow: hidden;
+    will-change: transform;
+    position: relative;
+}
+
+.virtual-grid__content {
+    will-change: transform;
+    display: flex;
+    flex-wrap: wrap;
+}

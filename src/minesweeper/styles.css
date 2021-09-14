@@ -1,0 +1,146 @@
+:root {
+    --grid-cell: 30px;
+}
+
+.tile {
+    background: #c0c0c0;
+    border-top: 2px solid #fdfdfd;
+    border-left: 2px solid #fdfdfd;
+    border-right: 2px solid #808080;
+    border-bottom: 2px solid #808080;
+    box-sizing: border-box;
+    min-width: var(--grid-cell);
+    min-height: var(--grid-cell);
+    height: var(--grid-cell);
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.tile_hint {
+    background: rgb(192 192 192);
+    border: 1px solid rgb(153 153 153);
+}
+
+.tile_brick:not(.tile_mine):not(.tile_exploded):not(.tile_not_clickable):hover {
+    background: #ccc;
+    cursor: pointer;
+}
+
+.tile_hint-1 {
+    color: black;
+}
+.tile_hint-2 {
+    color: indigo;
+}
+.tile_hint-3 {
+    color: purple;
+}
+.tile_hint-4 {
+    color: blue;
+}
+.tile_hint-5 {
+    color: green;
+}
+.tile_hint-6 {
+    color: yellow;
+}
+.tile_hint-7 {
+    color: orange;
+}
+.tile_hint-8 {
+    color: red;
+}
+
+.tile_flag:before {
+    color: red;
+    content: 'F';
+}
+
+.tile_mine,
+.tile_exploded {
+    background-image: url('./mine.png');
+    background-size: cover;
+}
+
+.tile_exploded {
+    background-color: red;
+}
+
+.game__loader {
+    position: absolute;
+    z-index: 99;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition-delay: 250ms;
+    transition-property: visibility;
+}
+
+.game__stats {
+    padding-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    padding-right: 5px;
+}
+
+.window__wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    padding: 5rem;
+    background: teal;
+    height: calc(100vh - 10rem);
+    font-family: ms_sans_serif;
+    gap: 2rem;
+}
+
+.window__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.close-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-left: -1px;
+    margin-top: -1px;
+    transform: rotateZ(45deg);
+    position: relative;
+    &:before,
+    &:after {
+        content: '';
+        position: absolute;
+    }
+    &:before {
+        height: 100%;
+        width: 3px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    &:after {
+        height: 3px;
+        width: 100%;
+        left: 0px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+}
+
+.window__settings {
+    position: absolute !important;
+    top: calc(50% - 30px);
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    width: 300px;
+}
+
+.window {
+    width: 350px;
+    min-height: 200px;
+}
