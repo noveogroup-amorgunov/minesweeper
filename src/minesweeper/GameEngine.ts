@@ -1,3 +1,4 @@
+import 'babel-polyfill';
 import {initBoard} from './eventTransport';
 import {
     FLAG_ENUMS,
@@ -270,9 +271,9 @@ export class GameEngine {
                 this.requestViewportGrid();
                 return;
             }
-        }
 
-        this.requestViewportGrid();
+            this.requestViewportGrid();
+        }
         window.requestIdleCallback(() => this.revealingStack());
     }
 

@@ -1,14 +1,9 @@
 import {HIDDEN_MINE_ENUM, HIDDEN_ENUM} from './constants';
 import {EVENTS} from './eventTransport';
 
-function generateMines(array: Uint8Array, minesNum: number) {
+export function generateMines(array: Uint8Array, minesNum: number) {
     const probability = minesNum / array.length;
     let generatedMines = 0;
-
-    // const pseudoRandomSeq = [];
-    // for(let i = 0; i < Math.min(500, array.length); i++) {
-    //     pseudoRandomSeq.push(Math.random());
-    // }
 
     /**
      * Save hidden tile index to handle first user click.
@@ -78,6 +73,11 @@ function transferDataToMainThreadWithBuffer<T extends any>(
 const eventToHandlerMap = {
     [EVENTS.INIT_BOARD]: initGrid,
 };
+
+if (typeof self === 'undefined') {
+    // @ts-expect-error fix self error for jest
+    global.self = {onmessage: e => e};
+}
 
 self.onmessage = function (e) {
     if (!Object.values(EVENTS).includes(e.data.type)) {
