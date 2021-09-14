@@ -90,9 +90,9 @@
     justify-content: center;
     align-items: center;
     flex-direction: column;
-    padding: 5rem;
+    padding: 5rem 3rem;
     background: teal;
-    height: calc(100vh - 10rem);
+    min-height: calc(100vh - 10rem);
     font-family: ms_sans_serif;
     gap: 2rem;
 }

@@ -18,7 +18,9 @@ type TileViewProps = {
     };
 };
 
-export const TileView = React.memo(({itemData}: TileViewProps) => {
+export const TileView = React.memo(function TileView({
+    itemData,
+}: TileViewProps) {
     const {
         value,
         index,
@@ -46,7 +48,7 @@ export const TileView = React.memo(({itemData}: TileViewProps) => {
         [index, isPlaying]
     );
 
-    let label = (HINT_ENUMS.has(value) && value) || '';
+    const label = (HINT_ENUMS.has(value) && value) || '';
 
     const classes = [
         'tile',

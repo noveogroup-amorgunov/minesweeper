@@ -1,9 +1,10 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
     entry: {
         main: './src/main.tsx',
-        worker: './src/minesweeper/GameWorker.ts'
+        worker: './src/minesweeper/GameWorker.ts',
     },
     devtool: false,
     module: {
@@ -11,29 +12,29 @@ module.exports = {
             {
                 test: /\.ts(x?)$/,
                 exclude: /node_modules/,
-                use: { loader: 'babel-loader' },
+                use: {loader: 'babel-loader'},
             },
             {
                 test: /\.(woff|woff2)$/,
                 use: {
-                  loader: 'url-loader',
+                    loader: 'url-loader',
                 },
-              },
-              {
+            },
+            {
                 test: /\.css$/i,
                 use: [
-                  "style-loader",
-                  "css-loader",
-                  {
-                    loader: "postcss-loader",
-                    options: {
-                      postcssOptions: {
-                        plugins: ["postcss-preset-env"],
-                      },
+                    'style-loader',
+                    'css-loader',
+                    {
+                        loader: 'postcss-loader',
+                        options: {
+                            postcssOptions: {
+                                plugins: ['postcss-preset-env'],
+                            },
+                        },
                     },
-                  },
                 ],
-              },
+            },
         ],
     },
     output: {

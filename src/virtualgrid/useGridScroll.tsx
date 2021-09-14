@@ -1,29 +1,29 @@
-import { useEffect, useState, useRef } from "react";
+import {useEffect, useState, useRef} from 'react';
 
 export const useGridScroll = () => {
-  const [scrollTop, setScrollTop] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-  const ref = useRef<HTMLDivElement>();
+    const [scrollTop, setScrollTop] = useState(0);
+    const [scrollLeft, setScrollLeft] = useState(0);
+    const ref = useRef<HTMLDivElement>();
 
-  const onScroll = (e: Event & { target: Element }) =>
-    requestAnimationFrame(() => {
-      setScrollTop(e.target.scrollTop);
-      setScrollLeft(e.target.scrollLeft);
-    });
+    const onScroll = (e: Event & {target: Element}) =>
+        requestAnimationFrame(() => {
+            setScrollTop(e.target.scrollTop);
+            setScrollLeft(e.target.scrollLeft);
+        });
 
-  useEffect(() => {
-    const scrollContainer = ref.current;
+    useEffect(() => {
+        const scrollContainer = ref.current;
 
-    if (!scrollContainer) {
-      return;
-    }
+        if (!scrollContainer) {
+            return;
+        }
 
-    setScrollTop(scrollContainer.scrollTop);
-    setScrollLeft(scrollContainer.scrollLeft);
-    scrollContainer.addEventListener("scroll", onScroll);
+        setScrollTop(scrollContainer.scrollTop);
+        setScrollLeft(scrollContainer.scrollLeft);
+        scrollContainer.addEventListener('scroll', onScroll);
 
-    return () => scrollContainer.removeEventListener("scroll", onScroll);
-  }, []);
+        return () => scrollContainer.removeEventListener('scroll', onScroll);
+    }, []);
 
-  return [scrollTop, scrollLeft, ref] as const;
+    return [scrollTop, scrollLeft, ref] as const;
 };

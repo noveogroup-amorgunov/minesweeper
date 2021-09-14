@@ -212,5 +212,7 @@ function GameWindowView({Component}: {Component: React.ComponentType<any>}) {
 }
 
 export const withGameWindow = (Component: React.ComponentType<any>) => {
-    return () => <GameWindowView Component={Component} />;
+    return function GameWindowViewHoc() {
+        return <GameWindowView Component={Component} />;
+    };
 };

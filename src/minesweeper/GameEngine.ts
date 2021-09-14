@@ -1,22 +1,33 @@
 import {initBoard} from './eventTransport';
-import {FLAG_ENUMS, HIDDEN_ENUMS, MINE_ENUMS, EXPLODED_ENUM, HIDDEN_MINE_ENUM} from './constants';
+import {
+    FLAG_ENUMS,
+    HIDDEN_ENUMS,
+    MINE_ENUMS,
+    EXPLODED_ENUM,
+    HIDDEN_MINE_ENUM,
+} from './constants';
 import type {GameState, TileValue} from './types';
 
 type InitArgs = {
     width: number;
     height: number;
     minesNum: number;
-}
+};
 
 type RequestViewportGridArgs = {
     startNodeX: number;
     startNodeY: number;
     viewportHeight: number;
     viewportWidth: number;
-}
+};
 
-type UpdateGridListener = (grid: Array<{value: TileValue; index: number}>) => void;
-type UpdateGameStateListener = (gameState: {state: GameState; isProcessing: boolean}) => void;
+type UpdateGridListener = (
+    grid: Array<{value: TileValue; index: number}>
+) => void;
+type UpdateGameStateListener = (gameState: {
+    state: GameState;
+    isProcessing: boolean;
+}) => void;
 
 export class GameEngine {
     /** Rows */
@@ -39,7 +50,7 @@ export class GameEngine {
 
     /** Listeners which call after updating game grid */
     updateGridListeners: UpdateGridListener[] = [];
-    
+
     /** Listeners which call after updating game state */
     updateGameStateListeners: UpdateGameStateListener[] = [];
 
@@ -59,7 +70,8 @@ export class GameEngine {
     isProcessing: boolean;
 
     /** Temporary storage for viewport grid args */
-    lastRequestViewportGridArgs: RequestViewportGridArgs = {} as RequestViewportGridArgs;
+    lastRequestViewportGridArgs: RequestViewportGridArgs =
+        {} as RequestViewportGridArgs;
 
     /** Tiles to reveal */
     revealStack: number[];
@@ -91,8 +103,10 @@ export class GameEngine {
     }
 
     emitChangeGameState() {
-        const {state, isProcessing} = this
-        this.updateGameStateListeners.forEach(listener => listener({state, isProcessing}));
+        const {state, isProcessing} = this;
+        this.updateGameStateListeners.forEach(listener =>
+            listener({state, isProcessing})
+        );
     }
 
     restart({width, height, minesNum}: InitArgs) {
@@ -120,16 +134,21 @@ export class GameEngine {
         this.updateGridListeners.push(fn);
 
         return () => {
-            this.updateGridListeners = this.updateGridListeners.filter(f => f !== fn);
-        }
+            this.updateGridListeners = this.updateGridListeners.filter(
+                listener => listener !== fn
+            );
+        };
     }
 
     addUpdateGameStateListener(fn: UpdateGameStateListener) {
         this.updateGameStateListeners.push(fn);
 
         return () => {
-            this.updateGameStateListeners = this.updateGameStateListeners.filter(f => f !== fn);
-        }
+            this.updateGameStateListeners =
+                this.updateGameStateListeners.filter(
+                    listener => listener !== fn
+                );
+        };
     }
 
     requestViewportGrid(nextProps?: RequestViewportGridArgs) {
@@ -143,18 +162,29 @@ export class GameEngine {
          */
         if (this.uInt8Array.byteLength === 0) {
             return setTimeout(() => {
-                this.requestViewportGrid()
+                this.requestViewportGrid();
             }, 10);
         }
 
-        const {startNodeX: offsetX, startNodeY: offsetY, viewportWidth, viewportHeight} = this.lastRequestViewportGridArgs;
+        const {
+            startNodeX: offsetX,
+            startNodeY: offsetY,
+            viewportWidth,
+            viewportHeight,
+        } = this.lastRequestViewportGridArgs;
         const {width, height} = this;
         const res: Array<{value: TileValue; index: number}> = [];
 
-        for(let i = offsetY; i < Math.min(offsetY + viewportHeight, height); i++) {
-            for(let j = offsetX; j < Math.min(offsetX + viewportWidth, width); j++) {
+        const lastY = Math.min(offsetY + viewportHeight, height);
+        const lastX = Math.min(offsetX + viewportWidth, width);
+
+        for (let i = offsetY; i < lastY; i++) {
+            for (let j = offsetX; j < lastX; j++) {
                 const idx = j + i * width;
-                res.push({ value: this.uInt8Array[idx] as TileValue, index: idx});
+                res.push({
+                    value: this.uInt8Array[idx] as TileValue,
+                    index: idx,
+                });
             }
         }
 
@@ -214,7 +244,7 @@ export class GameEngine {
         if (this.revealStack.length !== 0) {
             const index = this.revealStack.shift();
 
-            if (HIDDEN_ENUMS.has(this.uInt8Array[index])){
+            if (HIDDEN_ENUMS.has(this.uInt8Array[index])) {
                 this.tilesLeft -= 1;
 
                 let neighborMinesNum = 0;
@@ -225,7 +255,10 @@ export class GameEngine {
                 this.uInt8Array[index] = neighborMinesNum;
 
                 if (neighborMinesNum === 0) {
-                    for (const [neighborIndex] of this.getNeighbors(index, HIDDEN_ENUMS)) {
+                    for (const [neighborIndex] of this.getNeighbors(
+                        index,
+                        HIDDEN_ENUMS
+                    )) {
                         this.revealStack.push(neighborIndex);
                     }
                 }
@@ -252,7 +285,12 @@ export class GameEngine {
                 if (dx !== 0 || dy !== 0) {
                     const x2 = x + dx;
                     const y2 = y + dy;
-                    if (x2 >= 0 && x2 < this.width && y2 >= 0 && y2 < this.height) {
+                    if (
+                        x2 >= 0 &&
+                        x2 < this.width &&
+                        y2 >= 0 &&
+                        y2 < this.height
+                    ) {
                         const i = this.width * y2 + x2;
                         if (_set.has(this.uInt8Array[i]) && i != index) {
                             yield [i];

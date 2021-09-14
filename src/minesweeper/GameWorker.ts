@@ -1,9 +1,9 @@
-import {MINE_ENUMS, HIDDEN_MINE_ENUM, HIDDEN_ENUM, FLAG_ENUMS} from './constants';
+import {HIDDEN_MINE_ENUM, HIDDEN_ENUM} from './constants';
 import {EVENTS} from './eventTransport';
 
 function generateMines(array: Uint8Array, minesNum: number) {
+    const probability = minesNum / array.length;
     let generatedMines = 0;
-    let probability = minesNum / array.length;
 
     // const pseudoRandomSeq = [];
     // for(let i = 0; i < Math.min(500, array.length); i++) {
@@ -22,9 +22,9 @@ function generateMines(array: Uint8Array, minesNum: number) {
      * so using simple Math.random() probability with O(2N)
      * in the worst case.
      */
-    for(let i = 0; i < array.length; i++) {
+    for (let i = 0; i < array.length; i++) {
         if (generatedMines >= minesNum) {
-            for(let j = i; j < array.length; j++) {
+            for (let j = i; j < array.length; j++) {
                 array[j] = HIDDEN_ENUM;
                 emptyTileIndex = i;
             }
@@ -40,14 +40,12 @@ function generateMines(array: Uint8Array, minesNum: number) {
         }
     }
 
-    console.log(array, minesNum, generatedMines);
-
     /**
      * If loop above generated mines less than specified value
      * add mines
      */
     if (minesNum > generatedMines) {
-        for(let i = 0; i < array.length; i++) {
+        for (let i = 0; i < array.length; i++) {
             if (array[i] === HIDDEN_MINE_ENUM || i === emptyTileIndex) {
                 continue;
             }
@@ -69,16 +67,19 @@ function initGrid({array, minesNum}: {array: Uint8Array; minesNum: number}) {
     return {inited: true, emptyTileIndex};
 }
 
-function transferDataToMainThreadWithBuffer<T extends any>(array: Uint8Array, result: T) {
+function transferDataToMainThreadWithBuffer<T extends any>(
+    array: Uint8Array,
+    result: T
+) {
     // @ts-expect-error webworker postMessage has wrong typings
     self.postMessage({buffer: array.buffer, ...(result || {})}, [array.buffer]);
 }
 
 const eventToHandlerMap = {
     [EVENTS.INIT_BOARD]: initGrid,
-}
+};
 
-self.onmessage = function(e) {
+self.onmessage = function (e) {
     if (!Object.values(EVENTS).includes(e.data.type)) {
         console.warn('Unknown event to worker', e);
         return;
