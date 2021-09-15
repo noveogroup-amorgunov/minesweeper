@@ -33,13 +33,13 @@ export const useEnhance = () => {
 
     const onChangeHeight = useCallback(
         (raw: number) => setHeight(Math.min(Math.max(Number(raw), 2), 10 ** 4)),
-        [height]
+        [setHeight]
     );
 
     const onChangeMinesNum = useCallback(
         (raw: number) =>
-            setMinesNum(Math.min(Math.max(Number(raw), 1), 10 ** 8 - 1)),
-        [minesNum]
+            setMinesNum(Math.min(Math.max(Number(raw), 1), width * height - 1)),
+        [minesNum, width, height]
     );
 
     const onClick = useCallback(() => {
