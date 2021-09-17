@@ -3,12 +3,14 @@ import {useEffect, useState, useRef} from 'react';
 export const useGridScroll = () => {
     const [scrollTop, setScrollTop] = useState(0);
     const [scrollLeft, setScrollLeft] = useState(0);
-    const ref = useRef<HTMLDivElement>();
+    const ref = useRef<HTMLDivElement>(null);
 
-    const onScroll = (e: Event & {target: Element}) =>
+    const onScroll = (e: Event) =>
         requestAnimationFrame(() => {
-            setScrollTop(e.target.scrollTop);
-            setScrollLeft(e.target.scrollLeft);
+            setScrollTop((e as unknown as {target: Element}).target.scrollTop);
+            setScrollLeft(
+                (e as unknown as {target: Element}).target.scrollLeft
+            );
         });
 
     useEffect(() => {

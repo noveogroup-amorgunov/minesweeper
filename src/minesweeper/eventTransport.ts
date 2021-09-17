@@ -15,5 +15,5 @@ export const initBoard = ({
 }) =>
     ({
         type: EVENTS.INIT_BOARD,
-        payload: {array, width, height, minesNum}
+        payload: {array, width, height, minesNum},
     } as const);

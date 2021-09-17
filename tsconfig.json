@@ -4,11 +4,13 @@
     "sourceMap": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
+    "strict": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "module": "commonjs",
     "target": "es2020",
     "jsx": "react",
-    "baseUrl": "src"
+    "baseUrl": "src",
+    "lib": ["webworker", "es2020", "dom"]
   }
 }

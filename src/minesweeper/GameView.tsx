@@ -17,7 +17,7 @@ export const useEnhance = ({width, height, minesNum}: GameViewProps) => {
         state: 'PLAYING',
         isProcessing: false,
     });
-    const gameEngine = useRef<GameEngine>(null);
+    const gameEngine = useRef<GameEngine | null>(null);
 
     const cellsInViewportWidth = Math.min(
         gameEngine.current?.width || width,
@@ -62,7 +62,7 @@ export const useEnhance = ({width, height, minesNum}: GameViewProps) => {
     }, []);
 
     const onGameCreate = useCallback(() => {
-        gameEngine.current.restart({width, height, minesNum});
+        gameEngine.current!.restart({width, height, minesNum});
     }, [width, height, minesNum]);
 
     const buttonLabel = useMemo(() => {
@@ -75,10 +75,11 @@ export const useEnhance = ({width, height, minesNum}: GameViewProps) => {
         if (gameState.state === 'WIN') {
             return 'You won! Restart';
         }
+        return '';
     }, [gameState]);
 
-    const onFlag = (index: number) => gameEngine.current.flag(index);
-    const onReveal = (index: number) => gameEngine.current.reveal(index);
+    const onFlag = (index: number) => gameEngine.current!.flag(index);
+    const onReveal = (index: number) => gameEngine.current!.reveal(index);
     const sharedItemData = useMemo(
         () => ({
             onFlag,

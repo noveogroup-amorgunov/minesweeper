@@ -42,7 +42,7 @@ describe('minesweeper/GameWorker', () => {
             const array = new Uint8Array(new ArrayBuffer(100));
             const minesNum = 99;
 
-            const emptyTileIndex = generateMines(array, minesNum);
+            const emptyTileIndex = generateMines(array, minesNum) as number;
 
             expect(array[emptyTileIndex]).toEqual(HIDDEN_ENUM);
         });

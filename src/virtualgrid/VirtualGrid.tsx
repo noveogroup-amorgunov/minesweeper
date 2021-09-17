@@ -52,7 +52,7 @@ export function VirtualGrid<T extends {index: number}, P>({
 
     const child = useMemo(
         () =>
-            data.map((itemData: T & P) => (
+            data.map((itemData: T) => (
                 <Item
                     key={itemData.index}
                     itemData={itemData}

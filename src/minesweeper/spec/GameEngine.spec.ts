@@ -33,7 +33,6 @@ describe('minesweeper/GameEngine', () => {
         it('should emit viewport array', () => {
             const mockFn = jest.fn();
             gameEngine.addUpdateGridListener(mockFn);
-
             gameEngine.requestViewportGrid({
                 startNodeX: 8,
                 startNodeY: 10,
@@ -58,6 +57,8 @@ describe('minesweeper/GameEngine', () => {
             gameEngine.uInt8Array[101] = 12;
 
             gameEngine.addUpdateGridListener(mockFn);
+
+            // @ts-expect-error private prop
             gameEngine.lastRequestViewportGridArgs = {
                 startNodeX: 0,
                 startNodeY: 0,
@@ -124,7 +125,7 @@ describe('minesweeper/GameEngine', () => {
 
             gameEngine.reveal(index);
 
-            expect(gameEngine.revealStack).toEqual([index]);
+            expect(gameEngine.getRevealStack()).toEqual([index]);
         });
 
         it('should handle case if user click to mine in first move', () => {
@@ -159,7 +160,7 @@ describe('minesweeper/GameEngine', () => {
 
             gameEngine.reveal(index);
 
-            expect(gameEngine.revealStack).toEqual([]);
+            expect(gameEngine.getRevealStack()).toEqual([]);
         });
 
         it('should do nothing if tile is not hidden', () => {
@@ -168,7 +169,7 @@ describe('minesweeper/GameEngine', () => {
 
             gameEngine.reveal(index);
 
-            expect(gameEngine.revealStack).toEqual([]);
+            expect(gameEngine.getRevealStack()).toEqual([]);
         });
     });
 
@@ -178,11 +179,12 @@ describe('minesweeper/GameEngine', () => {
             const index = 1333;
             gameEngine.addUpdateGridListener(mockFn);
             gameEngine.uInt8Array[index] = HIDDEN_ENUM;
-            gameEngine.revealStack = [index];
+            gameEngine.setRevealStack([index]);
+            // @ts-expect-error private method
             gameEngine.revealingStack();
 
             expect(mockFn).toBeCalledTimes(1);
-            expect(gameEngine.revealStack.length).toEqual(8);
+            expect(gameEngine.getRevealStack().length).toEqual(8);
         });
 
         it('should put nothing to stack if tile is not 0', () => {
@@ -191,11 +193,12 @@ describe('minesweeper/GameEngine', () => {
             gameEngine.addUpdateGridListener(mockFn);
             gameEngine.uInt8Array[index] = HIDDEN_ENUM;
             gameEngine.uInt8Array[index + 1] = HIDDEN_MINE_ENUM;
-            gameEngine.revealStack = [index];
+            gameEngine.setRevealStack([index]);
+            // @ts-expect-error private method
             gameEngine.revealingStack();
 
             expect(mockFn).toBeCalledTimes(1);
-            expect(gameEngine.revealStack).toEqual([]);
+            expect(gameEngine.getRevealStack()).toEqual([]);
         });
 
         it('should finish game if empty tiles are not left', () => {
@@ -204,7 +207,8 @@ describe('minesweeper/GameEngine', () => {
             gameEngine.addUpdateGridListener(mockFn);
             gameEngine.tilesLeft = 1;
             gameEngine.uInt8Array[index] = HIDDEN_ENUM;
-            gameEngine.revealStack = [index];
+            gameEngine.setRevealStack([index]);
+            // @ts-expect-error private method
             gameEngine.revealingStack();
 
             expect(mockFn).toBeCalledTimes(1);
@@ -216,6 +220,7 @@ describe('minesweeper/GameEngine', () => {
         it('should do nothing if stack is empty', () => {
             const mockFn = jest.fn();
             gameEngine.addUpdateGridListener(mockFn);
+            // @ts-expect-error private method
             gameEngine.revealingStack();
 
             expect(mockFn).toBeCalledTimes(0);
@@ -228,7 +233,8 @@ describe('minesweeper/GameEngine', () => {
             const actualIndexes = [];
             const expected = [54, 154, 254, 55, 255, 56, 156, 256];
 
-            for (const [neighborIndex] of gameEngine.getNeighbors(
+            // @ts-expect-error private method
+            for (const neighborIndex of gameEngine.getNeighborsIndexes(
                 index,
                 HIDDEN_ENUMS
             )) {

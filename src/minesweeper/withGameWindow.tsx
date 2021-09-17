@@ -24,7 +24,7 @@ export const useEnhance = () => {
         if (minesNum > width * height - 1) {
             setMinesNum(width * height - 1);
         }
-    }, [width, height]);
+    }, [width, height, minesNum]);
 
     const onChangeWidth = useCallback(
         (raw: number) => setWidth(Math.min(Math.max(Number(raw), 2), 10 ** 4)),
@@ -39,7 +39,7 @@ export const useEnhance = () => {
     const onChangeMinesNum = useCallback(
         (raw: number) =>
             setMinesNum(Math.min(Math.max(Number(raw), 1), width * height - 1)),
-        [minesNum, width, height]
+        [width, height]
     );
 
     const onClick = useCallback(() => {

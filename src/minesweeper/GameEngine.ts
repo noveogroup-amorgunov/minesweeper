@@ -32,22 +32,22 @@ type UpdateGameStateListener = (gameState: {
 
 export class GameEngine {
     /** Rows */
-    width: number;
+    width = 0;
 
     /** Columns */
-    height: number;
+    height = 0;
 
     /** Num of the mines */
-    minesNum: number;
+    minesNum = 0;
 
     /** Game state */
-    state: GameState;
+    state: GameState = 'PLAYING';
 
     /** Number of unrevealed mines  */
-    minesLeft: number;
+    minesLeft = 0;
 
     /** Number of unrevealed tiles  */
-    tilesLeft: number;
+    tilesLeft = 0;
 
     /** Listeners which call after updating game grid */
     updateGridListeners: UpdateGridListener[] = [];
@@ -62,24 +62,27 @@ export class GameEngine {
     uInt8Array: Uint8Array;
 
     /** Store any empty title to handle first user click */
-    emptyTileIndex: number;
+    emptyTileIndex = -1;
 
     /** User start game */
-    userDidFirstMove: boolean;
+    userDidFirstMove = false;
 
     /** Processing data in worker */
-    isProcessing: boolean;
+    isProcessing = false;
 
     /** Temporary storage for viewport grid args */
-    lastRequestViewportGridArgs: RequestViewportGridArgs =
+    private lastRequestViewportGridArgs: RequestViewportGridArgs =
         {} as RequestViewportGridArgs;
 
     /** Tiles to reveal */
-    revealStack: number[];
+    private revealStack: number[] = [];
 
-    worker: Worker = new Worker('./worker.js');
+    private worker: Worker = new Worker('./worker.js');
 
     constructor({width, height, minesNum}: InitArgs) {
+        this.boardBuffer = new ArrayBuffer(this.width * this.height);
+        this.uInt8Array = new Uint8Array(this.boardBuffer);
+
         this.restart({width, height, minesNum});
 
         this.worker.addEventListener('message', event => {
@@ -93,17 +96,25 @@ export class GameEngine {
         });
     }
 
-    setProcessing(isProcessing: boolean) {
+    getRevealStack(): number[] {
+        return this.revealStack;
+    }
+
+    setRevealStack(nextRevealStack: number[]) {
+        this.revealStack = nextRevealStack;
+    }
+
+    private setProcessing(isProcessing: boolean) {
         this.isProcessing = isProcessing;
         this.emitChangeGameState();
     }
 
-    setGameState(gameState: GameState) {
+    private setGameState(gameState: GameState) {
         this.state = gameState;
         this.emitChangeGameState();
     }
 
-    emitChangeGameState() {
+    private emitChangeGameState() {
         const {state, isProcessing} = this;
         this.updateGameStateListeners.forEach(listener =>
             listener({state, isProcessing})
@@ -241,22 +252,21 @@ export class GameEngine {
         this.revealStack.push(index);
     }
 
-    revealingStack() {
+    private revealingStack() {
         if (this.revealStack.length !== 0) {
-            const index = this.revealStack.shift();
+            const index = this.revealStack.shift() as number;
 
             if (HIDDEN_ENUMS.has(this.uInt8Array[index])) {
                 this.tilesLeft -= 1;
 
-                let neighborMinesNum = 0;
-                for (const [] of this.getNeighbors(index, MINE_ENUMS)) {
-                    neighborMinesNum++;
-                }
+                const neighborMinesNum = [
+                    ...this.getNeighborsIndexes(index, MINE_ENUMS),
+                ].length;
 
                 this.uInt8Array[index] = neighborMinesNum;
 
                 if (neighborMinesNum === 0) {
-                    for (const [neighborIndex] of this.getNeighbors(
+                    for (const neighborIndex of this.getNeighborsIndexes(
                         index,
                         HIDDEN_ENUMS
                     )) {
@@ -277,7 +287,7 @@ export class GameEngine {
         window.requestIdleCallback(() => this.revealingStack());
     }
 
-    *getNeighbors(index: number, _set: Set<number>) {
+    private *getNeighborsIndexes(index: number, _set: Set<number>) {
         const x = index % this.width;
         const y = Math.floor(index / this.width);
 
@@ -294,7 +304,7 @@ export class GameEngine {
                     ) {
                         const i = this.width * y2 + x2;
                         if (_set.has(this.uInt8Array[i]) && i != index) {
-                            yield [i];
+                            yield i;
                         }
                     }
                 }

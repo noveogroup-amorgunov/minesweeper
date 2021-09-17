@@ -1,7 +1,7 @@
 import {HIDDEN_MINE_ENUM, HIDDEN_ENUM} from './constants';
 import {EVENTS} from './eventTransport';
 
-export function generateMines(array: Uint8Array, minesNum: number) {
+export function generateMines(array: Uint8Array, minesNum: number): number {
     const probability = minesNum / array.length;
     let generatedMines = 0;
 
@@ -10,7 +10,7 @@ export function generateMines(array: Uint8Array, minesNum: number) {
      * It help us to swap this tile with first clicked one
      * if user click to mine.
      */
-    let emptyTileIndex;
+    let emptyTileIndex = 0;
 
     /**
      * Shuffle big array is very expensive,
