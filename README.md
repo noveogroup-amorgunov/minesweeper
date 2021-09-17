@@ -1,6 +1,8 @@
 # minesweeper
 
-Demo: https://minesweeper1.netlify.app/
+Play online: https://minesweeper1.netlify.app/
+
+![](./src/minesweeper/preview.gif)
 
 ## Installation
 
