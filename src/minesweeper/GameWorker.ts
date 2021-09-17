@@ -1,3 +1,5 @@
+declare const self: DedicatedWorkerGlobalScope;
+
 import {HIDDEN_MINE_ENUM, HIDDEN_ENUM} from './constants';
 import {EVENTS} from './eventTransport';
 
@@ -62,11 +64,12 @@ function initGrid({array, minesNum}: {array: Uint8Array; minesNum: number}) {
     return {inited: true, emptyTileIndex};
 }
 
-function transferDataToMainThreadWithBuffer<T extends any>(
+type IterableType<T = unknown> = {[key: string]: T};
+
+function transferDataToMainThreadWithBuffer<T extends IterableType>(
     array: Uint8Array,
     result: T
 ) {
-    // @ts-expect-error webworker postMessage has wrong typings
     self.postMessage({buffer: array.buffer, ...(result || {})}, [array.buffer]);
 }
 

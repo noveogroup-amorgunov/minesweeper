@@ -6,6 +6,9 @@ import {
     MINE_ENUMS,
     EXPLODED_ENUM,
     HIDDEN_MINE_ENUM,
+    INITIAL_BOARD_HEIGHT,
+    INITIAL_BOARD_WIDTH,
+    INITIAL_MINES,
 } from './constants';
 import type {GameState, TileValue} from './types';
 
@@ -32,13 +35,13 @@ type UpdateGameStateListener = (gameState: {
 
 export class GameEngine {
     /** Rows */
-    width = 0;
+    width = INITIAL_BOARD_WIDTH;
 
     /** Columns */
-    height = 0;
+    height = INITIAL_BOARD_HEIGHT;
 
     /** Num of the mines */
-    minesNum = 0;
+    minesNum = INITIAL_MINES;
 
     /** Game state */
     state: GameState = 'PLAYING';

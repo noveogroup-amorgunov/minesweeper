@@ -1,4 +1,7 @@
 export const TILE_SIZE = 30; // px
+export const INITIAL_BOARD_WIDTH = 10;
+export const INITIAL_BOARD_HEIGHT = 10;
+export const INITIAL_MINES = 25;
 
 export const FLAG_ENUM = 10;
 export const FLAG_MINE_ENUM = 9;

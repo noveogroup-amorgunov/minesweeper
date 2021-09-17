@@ -11,11 +11,16 @@ import {
     ListItem,
     Fieldset,
 } from 'react95';
+import {
+    INITIAL_BOARD_WIDTH,
+    INITIAL_BOARD_HEIGHT,
+    INITIAL_MINES,
+} from './constants';
 
 export const useEnhance = () => {
-    const [width, setWidth] = useState(10);
-    const [height, setHeight] = useState(10);
-    const [minesNum, setMinesNum] = useState(25);
+    const [width, setWidth] = useState(INITIAL_BOARD_WIDTH);
+    const [height, setHeight] = useState(INITIAL_BOARD_HEIGHT);
+    const [minesNum, setMinesNum] = useState(INITIAL_MINES);
     const [open, setOpen] = useState(false);
     const [openSettingModal, setOpenSettingModal] = useState(false);
     const startGameButtonRef = useRef<HTMLButtonElement>();
