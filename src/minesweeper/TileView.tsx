@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo} from 'react';
+import React from 'react';
 import {
     FLAG_ENUMS,
     HIDDEN_ENUMS,
@@ -12,41 +12,55 @@ type TileViewProps = {
     itemData: {
         value: TileValue;
         index: number;
+    };
+    sharedItemData: {
         onFlag: (index: number) => void;
         onReveal: (index: number) => void;
         gameState: {state: GameState; isProcessing: boolean};
     };
 };
 
+const propsAreEqual = (prevProps: TileViewProps, nextProps: TileViewProps) => {
+    const {itemData, sharedItemData} = prevProps;
+
+    return (
+        itemData.value === nextProps.itemData.value &&
+        itemData.index === nextProps.itemData.index &&
+        sharedItemData.onFlag === nextProps.sharedItemData.onFlag &&
+        sharedItemData.onReveal === nextProps.sharedItemData.onReveal &&
+        sharedItemData.gameState.state ===
+            nextProps.sharedItemData.gameState.state &&
+        sharedItemData.gameState.isProcessing ===
+            nextProps.sharedItemData.gameState.isProcessing
+    );
+};
+
 export const TileView = React.memo(function TileView({
     itemData,
+    sharedItemData,
 }: TileViewProps) {
+    const {value, index} = itemData;
     const {
-        value,
-        index,
         gameState: {state, isProcessing},
-    } = itemData;
+        onFlag,
+        onReveal,
+    } = sharedItemData;
 
-    const isPlaying = useMemo(
-        () => !isProcessing && state === 'PLAYING',
-        [isProcessing, state]
-    );
+    const isPlaying = !isProcessing && state === 'PLAYING';
 
-    const onFlag = useCallback(
-        (e: React.MouseEvent) => {
-            e.preventDefault();
-            isPlaying && itemData.onFlag(index);
-        },
-        [index, isPlaying]
-    );
+    const onFlagClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (isPlaying) {
+            onFlag(index);
+        }
+    };
 
-    const onReveal = useCallback(
-        (e: React.MouseEvent) => {
-            e.preventDefault();
-            isPlaying && itemData.onReveal(index);
-        },
-        [index, isPlaying]
-    );
+    const onRevealClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (isPlaying) {
+            onReveal(index);
+        }
+    };
 
     const label = (HINT_ENUMS.has(value) && value) || '';
 
@@ -66,10 +80,11 @@ export const TileView = React.memo(function TileView({
         <div
             data-index={index}
             className={classes.join(' ')}
-            onClick={onReveal}
-            onContextMenu={onFlag}
+            onClick={onRevealClick}
+            onContextMenu={onFlagClick}
         >
             {label}
         </div>
     );
-});
+},
+propsAreEqual);

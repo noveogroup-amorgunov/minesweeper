@@ -2,8 +2,9 @@ import React, {useEffect, useMemo} from 'react';
 import {useGridScroll} from './useGridScroll';
 import './styles.css';
 
-type Item<D> = {
-    itemData: D;
+type Item<T, P> = {
+    itemData: T;
+    sharedItemData: P;
     width: number;
     height: number;
     cellSize: number;
@@ -15,7 +16,7 @@ type VirtualGridProps<T extends {index: number}, P> = {
     width: number;
     height: number;
     cellSize: number;
-    Item: React.ComponentType<Item<T & P>>;
+    Item: React.ComponentType<Item<T, P>>;
     cellsInViewportHeight: number;
     cellsInViewportWidth: number;
     sharedItemData: P;
@@ -39,35 +40,29 @@ export function VirtualGrid<T extends {index: number}, P>({
     const [scrollTop, scrollLeft, ref] = useGridScroll();
     const viewportWidth = cellsInViewportWidth * cellSize;
     const viewportHeight = cellsInViewportHeight * cellSize;
-    const startCellY = Math.max(
-        0,
-        Math.floor((scrollTop as number) / cellSize)
-    );
-    const startCellX = Math.max(
-        0,
-        Math.floor((scrollLeft as number) / cellSize)
-    );
+    const startCellY = Math.max(0, Math.floor(scrollTop / cellSize));
+    const startCellX = Math.max(0, Math.floor(scrollLeft / cellSize));
+    const totalHeight = `${height * cellSize}px`;
+    const totalWidth = `${width * cellSize}px`;
 
     useEffect(
         () => updateGrid(startCellX, startCellY),
-        [startCellY, startCellX]
+        [startCellY, startCellX, updateGrid]
     );
-
-    const totalHeight = `${height * cellSize}px`;
-    const totalWidth = `${width * cellSize}px`;
 
     const child = useMemo(
         () =>
             data.map((itemData: T & P) => (
                 <Item
                     key={itemData.index}
-                    itemData={{...itemData, ...sharedItemData}}
+                    itemData={itemData}
+                    sharedItemData={sharedItemData}
                     width={width}
                     height={height}
                     cellSize={cellSize}
                 />
             )),
-        [data, width, height, cellSize]
+        [data, width, height, cellSize, sharedItemData, Item]
     );
 
     const styles: Styles = {

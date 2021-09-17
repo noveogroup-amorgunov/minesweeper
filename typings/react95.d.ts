@@ -16,7 +16,6 @@ declare module 'react95' {
     type ButtonProps = {
         variant?: string;
         size?: Size;
-        onClick?: () => void;
         active?: boolean;
         ref?: any;
         primary?: boolean;

@@ -81,7 +81,7 @@ if (typeof self === 'undefined') {
 
 self.onmessage = function (e) {
     if (!Object.values(EVENTS).includes(e.data.type)) {
-        console.warn('Unknown event to worker', e);
+        // console.warn('Unknown event to worker', e);
         return;
     }
 
