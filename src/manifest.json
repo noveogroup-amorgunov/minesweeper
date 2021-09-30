@@ -1,0 +1,17 @@
+{
+    "short_name": "minesweeper.exe",
+    "name": "Minesweeper on React+TypeScript",
+    "icons": [
+      {
+        "src": "./mine.png",
+        "type": "image/png",
+        "sizes": "192x192"
+      }
+    ],
+    "start_url": "/?source=pwa",
+    "background_color": "#008080",
+    "display": "standalone",
+    "scope": "/",
+    "theme_color": "#008080"
+  }
+  

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "jest",
     "start": "NODE_ENV=development webpack serve --mode development",
-    "build": "webpack --mode production && cp src/minesweeper/mine.png dist/mine.png",
+    "build": "webpack --mode production && cp src/minesweeper/mine.png dist/mine.png && cp src/manifest.json dist/manifest.json",
     "watch": "webpack --mode development --watch"
   },
   "keywords": [],
@@ -45,7 +45,8 @@
     "url-loader": "4.1.1",
     "webpack": "5.52.1",
     "webpack-cli": "4.8.0",
-    "webpack-dev-server": "4.2.0"
+    "webpack-dev-server": "4.2.0",
+    "workbox-webpack-plugin": "6.3.0"
   },
   "dependencies": {
     "react": "17.0.2",
