@@ -1,4 +1,3 @@
-import 'babel-polyfill';
 import {initBoard} from './eventTransport';
 import {
     FLAG_ENUMS,
@@ -290,9 +289,10 @@ export class GameEngine {
         window.requestIdleCallback(() => this.revealingStack());
     }
 
-    private *getNeighborsIndexes(index: number, _set: Set<number>) {
+    private getNeighborsIndexes(index: number, _set: Set<number>) {
         const x = index % this.width;
         const y = Math.floor(index / this.width);
+        const res = [];
 
         for (let dx = -1; dx < 2; dx++) {
             for (let dy = -1; dy < 2; dy++) {
@@ -307,11 +307,13 @@ export class GameEngine {
                     ) {
                         const i = this.width * y2 + x2;
                         if (_set.has(this.uInt8Array[i]) && i != index) {
-                            yield i;
+                            res.push(i);
                         }
                     }
                 }
             }
         }
+
+        return res;
     }
 }
