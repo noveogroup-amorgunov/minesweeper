@@ -101,8 +101,8 @@ export class GameEngine {
 
   restart({ width, height, minesNum }: InitArgs = {}) {
     this.scheduler.clear()
-    this.abortTaskController.abort()
-    this.abortTaskController = new TaskController()
+    // this.abortTaskController.abort()
+    // this.abortTaskController = new TaskController()
 
     this._width = width ?? this._width ?? INITIAL_BOARD_WIDTH
     this._height = height ?? this._height ?? INITIAL_BOARD_HEIGHT
@@ -315,14 +315,14 @@ export class GameEngine {
 
       if (neighborMinesNum === 0) {
         for (const neighborIndex of this.getNeighborsIndexes(index, HIDDEN_ENUMS)) {
-          // @ts-expect-error 123
-          scheduler.postTask(() => {
-            this.reveal(neighborIndex)
-          }, { priority: 'background', signal: this.abortTaskController.signal })
-
-          // this.scheduler.scheduleLowPriority(() => {
+          // @ts-expect-erro1r 123
+          // scheduler.postTask(() => {
           //   this.reveal(neighborIndex)
-          // })
+          // }, { priority: 'background', signal: this.abortTaskController.signal })
+
+          this.scheduler.scheduleLowPriority(() => {
+            this.reveal(neighborIndex)
+          })
         }
       }
     }
