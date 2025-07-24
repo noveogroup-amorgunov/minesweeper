@@ -1,0 +1,9 @@
+.root {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 16px;
+}
+
+.button {
+  min-width: 68px;
+}
