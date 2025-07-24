@@ -6,13 +6,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      devOptions: {
-        enabled: true,
-      },
-      // Generate with https://favicon.inbrowser.app/tools/favicon-generator
-      manifest: false,
-    }) as unknown as PluginOption,
+    // TODO: Add PWA
+    // VitePWA({
+    //   registerType: 'autoUpdate',
+    //   devOptions: {
+    //     enabled: true,
+    //   },
+    //   // Generate with https://favicon.inbrowser.app/tools/favicon-generator
+    //   manifest: false,
+    // }) as unknown as PluginOption,
   ],
 })
