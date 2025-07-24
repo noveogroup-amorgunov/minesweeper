@@ -67,7 +67,7 @@ export class GameEngine {
   public offsetY = 0
   public visibleBoard: Array<{ value: number, index: number }> = []
 
-  public abortTaskController = new TaskController()
+  // public abortTaskController = new TaskController()
 
   private worker: Worker = new Worker(new URL('./GameWebWorker.ts', import.meta.url), { type: 'module' })
 
