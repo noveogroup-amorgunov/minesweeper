@@ -7,11 +7,9 @@ import css from './GameStatusPanel.module.css'
 export function GameStatusPanel() {
   const gameEngine = useGameEngine()
   const minesLeft = useGameState(state => state.minesLeft)
-  const minesNum = gameEngine._minesNum
+  const minesNum = useGameState(state => state.minesNum)
   const gameStatus = useGameState(state => state.gameStatus)
   const minLength = Math.max(String(minesNum).length + 1, 3)
-
-  console.log('minLength', minLength)
 
   const buttonLabel = useMemo(() => {
     if (gameStatus === 'PLAYING') {

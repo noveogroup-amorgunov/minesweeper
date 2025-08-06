@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Anchor, Button, Fieldset, GroupBox, List, ListItem, MenuList, MenuListItem, NumberField, NumberInput, Toolbar, Window, WindowContent, WindowHeader } from 'react95'
+import { Anchor, Button, MenuList, MenuListItem, Toolbar, Window, WindowContent, WindowHeader } from 'react95'
+import { GameAbout } from './GameAbout'
 import { GameBoard } from './GameBoard'
 import { GameSettings } from './GameSettings'
 import { GameStats } from './GameStats'
@@ -9,11 +10,13 @@ import css from './GameView.module.css'
 export function GameView() {
   const [open, setOpen] = useState(false)
   const [openSettingModal, setOpenSettingModal] = useState(false)
+  const [openAboutModal, setOpenAboutModal] = useState(false)
 
   return (
     <div className={css.window__wrapper}>
       <Window className={css.window}>
         {openSettingModal && (<GameSettings onClose={() => setOpenSettingModal(false)} />)}
+        {openAboutModal && (<GameAbout onClose={() => setOpenAboutModal(false)} />)}
         <WindowHeader className={css.window__header}>
           <span>minesweeper.exe</span>
           <Button>
@@ -45,7 +48,11 @@ export function GameView() {
               <MenuListItem size="sm">Settings</MenuListItem>
             </MenuList>
           )}
-          <Button variant="menu" size="sm">
+          <Button
+            variant="menu"
+            size="sm"
+            onClick={() => setOpenAboutModal(true)}
+          >
             About
           </Button>
         </Toolbar>

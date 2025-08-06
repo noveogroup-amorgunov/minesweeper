@@ -6,7 +6,7 @@ export {}
 export interface WorkerMessage {
   type: 'GENERATE_BOARD_REQUEST'
   payload: {
-    array: Uint8Array
+    array: Uint8Array<ArrayBuffer>
     minesNum: number
   }
 }
@@ -24,9 +24,11 @@ self.onmessage = function (event: MessageEvent<WorkerMessage>) {
     const { array, minesNum } = event.data.payload
     const emptyTileIndex = generateMines(array, minesNum)
 
-    self.postMessage(
-      { type: 'GENERATE_BOARD_RESPONSE', data: { buffer: array.buffer, emptyTileIndex } } as MainThreadMessage,
-      [array.buffer],
-    )
+    const sendEvent: MainThreadMessage = {
+      type: 'GENERATE_BOARD_RESPONSE',
+      data: { buffer: array.buffer, emptyTileIndex },
+    }
+
+    self.postMessage(sendEvent, [array.buffer])
   }
 }

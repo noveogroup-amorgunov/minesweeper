@@ -78,15 +78,6 @@ export class EventEmitter {
   }
 
   /**
-   * Get the number of listeners for a specific event
-   * @param eventName - The name of the event
-   * @returns The number of listeners
-   */
-  listenerCount(eventName: string): number {
-    return this.events.get(eventName)?.length || 0
-  }
-
-  /**
    * Remove all event listeners
    */
   removeAllListeners(): void {

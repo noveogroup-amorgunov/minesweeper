@@ -30,7 +30,6 @@ export function generateMines(array: Uint8Array, minesNum: number): number {
 
   if (minesNum > generatedMines) {
     for (let i = 0; i < array.length; i++) {
-      // TODO: why ????
       if (array[i] === HIDDEN_MINE_CODE || i === emptyTileIndex) {
         continue
       }

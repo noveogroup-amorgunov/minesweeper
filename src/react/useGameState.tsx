@@ -2,7 +2,7 @@
 
 import type { GameEngine } from '../engine/GameEngine'
 import { useCallback, useSyncExternalStore } from 'react'
-import { GAME_EVENTS } from '../engine/GameEngine'
+import { GAME_ENGINE_EVENTS } from '../engine/GameEngine'
 import { useGameEngine } from './context'
 
 // const useBearStore = create(set => ({
@@ -19,25 +19,21 @@ import { useGameEngine } from './context'
 // function subscribe(callback: () => void) {
 //   console.log('subscribe:::', callback)
 //   // gameEngine.onUpdate = callback
-//   gameEngine.eventEmitter.on(GAME_EVENTS.UPDATE, callback)
+//   gameEngine.eventEmitter.on(GAME_ENGINE_EVENTS.UPDATE, callback)
 
 //   return () => {
 //     console.log('unsubscribe:::')
 //     // gameEngine.onUpdate = () => {}
-//     gameEngine.eventEmitter.off(GAME_EVENTS.UPDATE, callback)
+//     gameEngine.eventEmitter.off(GAME_ENGINE_EVENTS.UPDATE, callback)
 //   }
 // }
 
 function createSubscribe(gameEngine: GameEngine) {
   return (callback: () => void) => {
-    console.log('1111subscribe:::', callback)
-    // gameEngine.onUpdate = callback
-    gameEngine.eventEmitter.on(GAME_EVENTS.UPDATE, callback)
+    gameEngine.on(GAME_ENGINE_EVENTS.UPDATE, callback)
 
     return () => {
-      console.log('1111unsubscribe:::')
-      // gameEngine.onUpdate = () => {}
-      gameEngine.eventEmitter.off(GAME_EVENTS.UPDATE, callback)
+      gameEngine.off(GAME_ENGINE_EVENTS.UPDATE, callback)
     }
   }
 }

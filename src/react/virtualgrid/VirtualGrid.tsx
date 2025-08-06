@@ -1,6 +1,4 @@
-import type { UIEvent } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ScrollView } from 'react95'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import css from './VirtualGrid.module.css'
 
 function useGridScroll() {
@@ -8,12 +6,11 @@ function useGridScroll() {
   const [scrollLeft, setScrollLeft] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
 
-  const onScroll = (event: Event) =>
+  const onScroll = useCallback((event: Event) =>
     requestAnimationFrame(() => {
-      // FIXME maybe fix to target
       setScrollTop((event.target as HTMLDivElement).scrollTop)
       setScrollLeft((event.target as HTMLDivElement).scrollLeft)
-    })
+    }), [])
 
   useEffect(() => {
     const scrollContainer = ref.current

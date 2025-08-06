@@ -1,10 +1,41 @@
-type Task = () => void
+// TODO: remove this in future typescript version
+declare global {
+  interface Window {
+    scheduler: {
+      postTask: (
+        task: () => void,
+        options: { priority: 'background', signal?: AbortSignal }
+      ) => void
+    }
+  }
 
+  class TaskController {
+    signal: AbortSignal
+    abort: () => void
+  }
+}
+
+// const supportNativeScheduler = 'TaskController' in window && 'scheduler' in window
+// public abortTaskController = new TaskController()
+
+// this.abortTaskController.abort()
+// this.abortTaskController = new TaskController()
+// scheduler.postTask(() => {
+//   this.reveal(neighborIndex)
+// }, { priority: 'background', signal: this.abortTaskController.signal })
+
+// this.scheduler.scheduleLowPriority(() => {
+//   this.reveal(neighborIndex)
+// })
+
+type Task = () => void
 interface IdleTask {
   task: Task
   priority: 'high' | 'normal' | 'low'
   id: string
 }
+
+// TODO: move impl to TaskController + scheduler
 
 /**
  * Simple scheduler based on requestIdleCallback
@@ -81,21 +112,12 @@ export class Scheduler {
 
     this.isProcessing = true
 
-    // Use requestIdleCallback if available, otherwise fallback to setTimeout
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(
-        (deadline) => {
-          this.executeTasks(deadline)
-        },
-        { timeout: 50 }, // 50ms timeout to ensure tasks eventually run
-      )
-    }
-    else {
-      // Fallback for browsers that don't support requestIdleCallback
-      setTimeout(() => {
-        this.executeTasks({ timeRemaining: () => 16 }) // Simulate 16ms frame
-      }, 0)
-    }
+    requestIdleCallback(
+      (deadline) => {
+        this.executeTasks(deadline)
+      },
+      { timeout: 50 }, // 50ms timeout to ensure tasks eventually run
+    )
   }
 
   /**

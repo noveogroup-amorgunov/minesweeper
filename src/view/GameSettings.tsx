@@ -1,6 +1,9 @@
+/* eslint-disable no-alert */
+
 import { useState } from 'react'
 import { Anchor, Button, GroupBox, NumberInput, Window, WindowContent } from 'react95'
 import { useGameEngine } from '../react/context'
+import { useGameState } from '../react/useGameState'
 import css from './GameSettings.module.css'
 
 interface Props {
@@ -12,9 +15,13 @@ const MAX_HEIGHT = 1e4
 
 export function GameSettings({ onClose }: Props) {
   const gameEngine = useGameEngine()
-  const [width, setWidth] = useState(gameEngine._width)
-  const [height, setHeight] = useState(gameEngine._height)
-  const [minesNum, setMinesNum] = useState(gameEngine._minesNum)
+  const gameWidth = useGameState(state => state.width)
+  const gameHeight = useGameState(state => state.height)
+  const gameMinesNum = useGameState(state => state.minesNum)
+
+  const [width, setWidth] = useState(gameWidth)
+  const [height, setHeight] = useState(gameHeight)
+  const [minesNum, setMinesNum] = useState(gameMinesNum)
 
   const onChangeWidth = (value: number) => {
     if (value > MAX_WIDTH) {
@@ -51,8 +58,6 @@ export function GameSettings({ onClose }: Props) {
       alert(`Mines is too large, max is ${width * height - 1}`)
       return
     }
-
-    console.log('apply and restart game')
 
     gameEngine.restart({ width, height, minesNum })
     onClose()
