@@ -6,6 +6,7 @@ import { GameSettings } from './GameSettings'
 import { GameStats } from './GameStats'
 import { GameStatusPanel } from './GameStatusPanel'
 import css from './GameView.module.css'
+import { ResourceLoader } from './ResourceLoader'
 
 export function GameView() {
   const [open, setOpen] = useState(false)
@@ -14,6 +15,7 @@ export function GameView() {
 
   return (
     <div className={css.window__wrapper}>
+      <ResourceLoader />
       <Window className={css.window}>
         {openSettingModal && (<GameSettings onClose={() => setOpenSettingModal(false)} />)}
         {openAboutModal && (<GameAbout onClose={() => setOpenAboutModal(false)} />)}
