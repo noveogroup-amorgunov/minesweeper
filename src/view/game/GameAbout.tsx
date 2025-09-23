@@ -11,7 +11,9 @@ export function GameAbout({ onClose }: Props) {
       <WindowContent>
         <div>
           <GroupBox label="About:">
-            Created by <Anchor href="https://amorgunov.com">Alexander Morgunov</Anchor>
+            Created by
+            {' '}
+            <Anchor href="https://amorgunov.com">Alexander Morgunov</Anchor>
             <br />
             <br />
             <Button onClick={onClose}>Close</Button>

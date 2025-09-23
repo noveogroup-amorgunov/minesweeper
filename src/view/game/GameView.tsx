@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react'
-import { Anchor, Button, MenuList, MenuListItem, Toolbar, Window, WindowContent, WindowHeader } from 'react95'
+import { Anchor, Button, Frame, MenuList, MenuListItem, Toolbar, Window, WindowContent, WindowHeader } from 'react95'
+import { useGameEngine } from '../gameContext'
+import { reactScanIsEnabled, toggleReactScan } from '../reactScan'
 import { useOnClickOutside } from '../useClickOutside'
+import { useGameState } from '../useGameState'
 import { GameAbout } from './GameAbout'
 import { GameBoard } from './GameBoard'
 import { GameSettings } from './GameSettings'
@@ -8,11 +11,6 @@ import { GameStats } from './GameStats'
 import { GameStatusPanel } from './GameStatusPanel'
 import css from './GameView.module.css'
 import { ResourceLoader } from './ResourceLoader'
-import { useGameEngine } from '../gameContext'
-import { useGameState } from '../useGameState'
-
-// TODO: move to react-scan
-const reactScanIsEnabled = window.location.search.includes('debug=1')
 
 export function GameView() {
   const gameEngine = useGameEngine()
@@ -20,6 +18,7 @@ export function GameView() {
 
   const [open, setOpen] = useState(false)
   const [openSettingModal, setOpenSettingModal] = useState(false)
+  const [showDebugInfo, setShowDebugInfo] = useState(false)
   const [openAboutModal, setOpenAboutModal] = useState(false)
   const settingsMenuRef = useRef<HTMLElement>(null)
 
@@ -28,15 +27,6 @@ export function GameView() {
   }
 
   useOnClickOutside(settingsMenuRef, handleOutsideSettingsMenuClick)
-
-  const handleReactScanToggle = () => {
-    if (reactScanIsEnabled) {
-      window.location.href = window.location.href.replace('?debug=1', '')
-    }
-    else {
-      window.location.href = `${window.location.href}?debug=1`
-    }
-  }
 
   return (
     <div className={css.window__wrapper}>
@@ -88,7 +78,16 @@ export function GameView() {
               >
                 Settings
               </MenuListItem>
-              <MenuListItem size="sm" onClick={handleReactScanToggle}>
+              <MenuListItem
+                size="sm"
+                onClick={() => {
+                  setOpen(false)
+                  setShowDebugInfo(!showDebugInfo)
+                }}
+              >
+                Toggle debug info
+              </MenuListItem>
+              <MenuListItem size="sm" onClick={() => toggleReactScan()}>
                 Turn
                 {' '}
                 {reactScanIsEnabled ? 'off' : 'on'}
@@ -109,9 +108,11 @@ export function GameView() {
           <GameStatusPanel />
           <GameBoard />
         </WindowContent>
-        <WindowContent className={css.window__footer}>
-          <GameStats />
-        </WindowContent>
+        {showDebugInfo && (
+          <Frame variant="well" className="footer" style={{ width: '100%' }}>
+            <GameStats />
+          </Frame>
+        )}
       </Window>
       <div>
         Yet one minesweeper

@@ -1,5 +1,7 @@
 # minesweeper
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/0cb32d1b-0c39-4218-841e-e138de556a50/deploy-status)](https://app.netlify.com/projects/minesweeper1/deploys)
+
 Minesweeper game with a 10000x10000 field (10⁸ tiles). Play online: https://minesweeper1.netlify.app/
 
 ![](./preview.gif)
@@ -15,7 +17,7 @@ It's a pet project and an experimental playground to try modern (and, for me, ne
 - [x] Storage map in a binary data (`ArrayBuffer`, `UInt8Array`)
 - [x] Generate map inside the Web Workers (Web Workers, Transferable objects)
 - [x] Scheduler for recursive map opening (Scheduler.postTask, Priotity queue)
-- [ ] Fix all TODO/FIXME
+- [ ] Leaderboard
 - [ ] Write wrapper for Scheduler + polyfill
 - [ ] Save and load the game from file (OPFS)
 - [ ] Multiplayer mode (WebSockets)

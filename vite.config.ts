@@ -1,7 +1,7 @@
-import type { PluginOption } from 'vite'
+// import type { PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { VitePWA } from 'vite-plugin-pwa'
+// import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [

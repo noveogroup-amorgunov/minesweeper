@@ -6,6 +6,8 @@ const GameStatsState = memo(() => {
 
   return (
     <div>
+      GAME STATUS:
+      {' '}
       {gameStatus}
     </div>
   )

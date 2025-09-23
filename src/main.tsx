@@ -1,13 +1,10 @@
-// @ts-expect-error dont have types for react-scan/all-environments
-import { scan } from 'react-scan/all-environments'
-/* eslint-disable-next-line perfectionist/sort-imports */
-import { createRoot } from 'react-dom/client'
+/* eslint-disable perfectionist/sort-imports */
+// WARNING: initReactScan must be imported first
+import { initReactScan } from './view/reactScan'
 import { App } from './App'
+import { createRoot } from 'react-dom/client'
 import './core/requestIdleCallback'
 
-// TODO: move to react scan
-const reactScanIsEnabled = window.location.search.includes('debug=1')
-
-scan({ enabled: reactScanIsEnabled })
+initReactScan()
 
 createRoot(document.getElementById('root') as HTMLElement).render(<App />)
