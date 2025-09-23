@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import css from './VirtualGrid.module.css'
 
+const SCROLLBAR_WIDTH_PX = 26
+
 function useGridScroll() {
   const [scrollTop, setScrollTop] = useState(0)
   const [scrollLeft, setScrollLeft] = useState(0)
@@ -28,14 +30,6 @@ function useGridScroll() {
 
   return [scrollTop, scrollLeft, ref] as const
 }
-
-// interface Item<T, P> {
-//   itemData: T
-//   sharedItemData: P
-//   width: number
-//   height: number
-//   cellSize: number
-// }
 
 interface Props<T, P> {
   updateGrid: (startNodeX: number, startNodeY: number) => void
@@ -90,16 +84,14 @@ export function VirtualGrid<T, P>({
           value={tile.value}
           index={tile.index}
           {...sharedItemProps}
-          // onClick={onClick}
-          // gameStatus={gameStatus}
         />
       )),
     [data, width, height, cellSizePx, Item],
   )
 
   const styles: Styles = {
-    'height': viewportHeight + 26,
-    'width': viewportWidth + 26,
+    'height': viewportHeight + SCROLLBAR_WIDTH_PX,
+    'width': viewportWidth + SCROLLBAR_WIDTH_PX,
     '--grid-cell': `${cellSizePx}px`,
   }
 

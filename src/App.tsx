@@ -6,8 +6,8 @@ import original from 'react95/dist/themes/original'
 import { createGlobalStyle, ThemeProvider } from 'styled-components'
 
 import { GameEngine } from './engine/GameEngine'
-import { GameEngineProvider } from './react/context'
-import { GameView } from './view/GameView'
+import { GameEngineProvider } from './view/gameContext'
+import { GameView } from './view/game/GameView'
 
 const GlobalStyles = createGlobalStyle`
   ${styleReset}

@@ -1,11 +1,10 @@
 // import type { GameState, TileValue } from './types'
 
 import type { MainThreadMessage, WorkerMessage } from './GameWebWorker'
-import { EventEmitter } from '../core/EventEmitter'
+import { PubSub } from '../core/PubSub'
 import { Scheduler } from '../core/Scheduler'
 import { EXPLODED_CODE, FLAG_ENUMS, HIDDEN_ENUMS, HIDDEN_MINE_CODE, INITIAL_BOARD_HEIGHT, INITIAL_BOARD_WIDTH, INITIAL_MINES, MINE_ENUMS } from './consts'
 
-type Values<T> = T[keyof T]
 interface InitArgs {
   width?: number
   height?: number
@@ -13,10 +12,6 @@ interface InitArgs {
 }
 
 export type GameStatus = 'READY' | 'PENDING' | 'PLAYING' | 'DEAD' | 'WIN'
-
-export const GAME_ENGINE_EVENTS = {
-  UPDATE: 'game_update',
-} as const
 
 export class GameEngine {
   private _width: number = INITIAL_BOARD_WIDTH
@@ -48,7 +43,7 @@ export class GameEngine {
   /** User start game */
   private _userDidFirstMove = false
 
-  private _eventEmitter: EventEmitter = new EventEmitter()
+  private _gameUpdatePubSub: PubSub = new PubSub('game_update')
 
   public scheduler: Scheduler = new Scheduler()
 
@@ -59,6 +54,11 @@ export class GameEngine {
   // public abortTaskController = new TaskController()
 
   private worker: Worker = new Worker(new URL('./GameWebWorker.ts', import.meta.url), { type: 'module' })
+
+  /** Game time in seconds */
+  private _gameTimeSeconds = 0
+
+  private _gameTimeoutId: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     width = INITIAL_BOARD_WIDTH,
@@ -73,18 +73,29 @@ export class GameEngine {
         this._uInt8Array = new Uint8Array(this._boardBuffer)
         this._emptyTileIndex = event.data.data.emptyTileIndex
 
-        // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
         this.updateVisibleBoard()
+        this.runGameLoopTimer()
       }
     }
 
     this.restart({ width, height, minesNum })
   }
 
+  runGameLoopTimer() {
+    this._gameTimeoutId = setTimeout(() => {
+      this._gameTimeSeconds += 1
+      this._gameUpdatePubSub.emit()
+      this.runGameLoopTimer()
+    }, 1000)
+  }
+
   restart({ width, height, minesNum }: InitArgs = {}) {
     this.scheduler.clear()
     // this.abortTaskController.abort()
     // this.abortTaskController = new TaskController()
+
+    clearTimeout(this._gameTimeoutId!)
+    this._gameTimeSeconds = 0
 
     this._width = width ?? this._width
     this._height = height ?? this._height
@@ -100,10 +111,6 @@ export class GameEngine {
 
     this.gameStatus = 'PENDING'
 
-    // this.generateBoard()
-    // this.gameStatus = 'PLAYING'
-
-    // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
     this.updateVisibleBoard()
 
     this.worker.postMessage(
@@ -128,7 +135,6 @@ export class GameEngine {
       this._minesLeft -= 1
     }
 
-    // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
     this.updateVisibleBoard()
   }
 
@@ -144,6 +150,7 @@ export class GameEngine {
       boardByteLength: this._boardBuffer.byteLength,
       height: this._height,
       width: this._width,
+      gameTimeSeconds: this._gameTimeSeconds,
     }
   }
 
@@ -168,7 +175,7 @@ export class GameEngine {
 
     this.visibleBoard = res
 
-    this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
+    this._gameUpdatePubSub.emit()
   }
 
   reveal(index: number) {
@@ -195,16 +202,13 @@ export class GameEngine {
       this._uInt8Array[index] = EXPLODED_CODE
       this.gameStatus = 'DEAD'
       this._minesLeft = Math.min(0, this._minesLeft - 1) // FIXME: always 0
-
+      clearTimeout(this._gameTimeoutId!)
       this.updateVisibleBoard()
-      // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
 
       return
     }
 
     if (HIDDEN_ENUMS.has(tile)) {
-      // console.log('reveal::CLICK_TO_HIDDEN')
-
       this._tilesLeft -= 1
 
       const neighborMinesNum = [...this.getNeighborsIndexes(index, MINE_ENUMS)].length
@@ -213,7 +217,6 @@ export class GameEngine {
 
       if (neighborMinesNum === 0) {
         for (const neighborIndex of this.getNeighborsIndexes(index, HIDDEN_ENUMS)) {
-          // @ts-expect-erro1r 123
           // scheduler.postTask(() => {
           //   this.reveal(neighborIndex)
           // }, { priority: 'background', signal: this.abortTaskController.signal })
@@ -228,15 +231,14 @@ export class GameEngine {
     if (this._tilesLeft === 0) {
       this._minesLeft = 0
       this.gameStatus = 'WIN'
+      clearTimeout(this._gameTimeoutId!)
 
       this.updateVisibleBoard()
-      // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
 
       return
     }
 
     this.updateVisibleBoard()
-    // this._eventEmitter.emit(GAME_ENGINE_EVENTS.UPDATE)
   }
 
   private getNeighborsIndexes(index: number, _set: Set<number>) {
@@ -267,11 +269,7 @@ export class GameEngine {
     return res
   }
 
-  on(event: Values<typeof GAME_ENGINE_EVENTS>, callback: () => void) {
-    this._eventEmitter.on(event, callback)
-  }
-
-  off(event: Values<typeof GAME_ENGINE_EVENTS>, callback: () => void) {
-    this._eventEmitter.off(event, callback)
+  subscribe(callback: () => void) {
+    return this._gameUpdatePubSub.subscribe(callback)
   }
 }

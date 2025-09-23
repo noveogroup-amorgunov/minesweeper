@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
-import { useGameEngine } from '../react/context'
-import { useGameState } from '../react/useGameState'
-import { VirtualGrid } from '../react/virtualgrid/VirtualGrid'
+import { useGameEngine } from '../gameContext'
+import { useGameState } from '../useGameState'
+import { VirtualGrid } from '../virtualgrid/VirtualGrid'
 import { Tile } from './Tile'
 
 const CELL_SIZE_PX = 30

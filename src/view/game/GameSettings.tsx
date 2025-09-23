@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Anchor, Button, GroupBox, NumberInput, Window, WindowContent } from 'react95'
-import { useGameEngine } from '../react/context'
-import { useGameState } from '../react/useGameState'
+import { useGameEngine } from '../gameContext'
+import { useGameState } from '../useGameState'
 import css from './GameSettings.module.css'
 
 interface Props {

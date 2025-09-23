@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import { useGameState } from '../react/useGameState'
+import { useGameState } from '../useGameState'
 
 const GameStatsState = memo(() => {
   const gameStatus = useGameState(state => state.gameStatus)

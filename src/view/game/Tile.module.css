@@ -65,6 +65,11 @@
   background-size: cover;
 }
 
+.tile_flag.tile_mine {
+  background-image: url('./flag.png');
+  background-color: #ff7d7d;
+}
+
 .tile_mine,
 .tile_exploded {
   background-image: url('./mine.png');

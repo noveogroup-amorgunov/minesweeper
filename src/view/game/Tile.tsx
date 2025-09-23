@@ -1,4 +1,4 @@
-import type { GameStatus } from '../engine/GameEngine'
+import type { GameStatus } from '../../engine/GameEngine'
 import { memo, useCallback, useRef } from 'react'
 import {
   EXPLODED_CODE,
@@ -6,7 +6,7 @@ import {
   HIDDEN_ENUMS,
   HINT_ENUMS,
   MINE_ENUMS,
-} from '../engine/consts'
+} from '../../engine/consts'
 import css from './Tile.module.css'
 
 interface Props {

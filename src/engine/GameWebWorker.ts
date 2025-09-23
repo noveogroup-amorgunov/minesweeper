@@ -1,6 +1,4 @@
 import { generateMines } from './generateMines'
-// import { generateMines_arraySort } from './generateMines_arraySort'
-// import { generateMines_fisherYatesShuffle } from './generateMines_fisherYatesShuffle'
 
 declare const self: DedicatedWorkerGlobalScope
 export {}
@@ -25,8 +23,6 @@ self.onmessage = function (event: MessageEvent<WorkerMessage>) {
   if (event.data.type === 'GENERATE_BOARD_REQUEST') {
     const { array, minesNum } = event.data.payload
     const emptyTileIndex = generateMines(array, minesNum)
-    // const emptyTileIndex = generateMines_arraySort(array, minesNum)
-    // const emptyTileIndex = generateMines_fisherYatesShuffle(array, minesNum)
 
     const sendEvent: MainThreadMessage = {
       type: 'GENERATE_BOARD_RESPONSE',
