@@ -20,8 +20,8 @@ It's a pet project and an experimental playground to try modern (and, for me, ne
 - [ ] Leaderboard
 - [ ] Write wrapper for Scheduler + polyfill
 - [ ] Save and load the game from file (OPFS)
-- [ ] Multiplayer mode (WebSockets)
-- [ ] Local-first mode (PWA, CRDT, WebRTC)
+- [ ] Multiplayer mode (WebSockets, WebRTC)
+- [ ] Local-first mode (PWA, CRDT)
 
 ## Running locally
 

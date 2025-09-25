@@ -5,6 +5,8 @@ import original from 'react95/dist/themes/original'
 
 import { createGlobalStyle, ThemeProvider } from 'styled-components'
 
+import { Scheduler } from './core/Scheduler'
+import { SchedulerNavite, supportNativeScheduler } from './core/Scheduler_navite'
 import { GameEngine } from './engine/GameEngine'
 import { GameView } from './view/game/GameView'
 import { GameEngineProvider } from './view/gameContext'
@@ -36,7 +38,11 @@ const GlobalStyles = createGlobalStyle`
   }
 `
 
-const gameEngine = new GameEngine()
+const gameEngine = new GameEngine({
+  scheduler: supportNativeScheduler
+    ? new SchedulerNavite()
+    : new Scheduler(),
+})
 
 export function App() {
   return (

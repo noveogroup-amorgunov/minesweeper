@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import { supportNativeScheduler } from '../../core/Scheduler_navite'
 import { useGameState } from '../useGameState'
 
 const GameStatsState = memo(() => {
@@ -49,6 +50,11 @@ export function GameStats() {
         {boardSize}
       </div>
       <GameStatsState />
+      <div>
+        SCHEDULER:
+        {' '}
+        {supportNativeScheduler ? 'NATIVE' : 'CUSTOM'}
+      </div>
     </>
   )
 }

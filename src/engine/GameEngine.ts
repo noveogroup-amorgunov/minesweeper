@@ -1,8 +1,8 @@
 // import type { GameState, TileValue } from './types'
 
+import type { AbstractScheduler } from '../core/AbstractScheduler'
 import type { MainThreadMessage, WorkerMessage } from './GameWebWorker'
 import { PubSub } from '../core/PubSub'
-import { Scheduler } from '../core/Scheduler'
 import { EXPLODED_CODE, FLAG_ENUMS, HIDDEN_ENUMS, HIDDEN_MINE_CODE, INITIAL_BOARD_HEIGHT, INITIAL_BOARD_WIDTH, INITIAL_MINES, MINE_ENUMS } from './consts'
 
 interface InitArgs {
@@ -45,13 +45,11 @@ export class GameEngine {
 
   private _gameUpdatePubSub: PubSub = new PubSub('game_update')
 
-  public scheduler: Scheduler = new Scheduler()
+  private scheduler: AbstractScheduler
 
   public offsetX = 0
   public offsetY = 0
   public visibleBoard: Array<{ value: number, index: number }> = []
-
-  // public abortTaskController = new TaskController()
 
   private worker: Worker = new Worker(new URL('./GameWebWorker.ts', import.meta.url), { type: 'module' })
 
@@ -60,11 +58,19 @@ export class GameEngine {
 
   private _gameTimeoutId: ReturnType<typeof setTimeout> | null = null
 
-  constructor(
+  constructor({
     width = INITIAL_BOARD_WIDTH,
     height = INITIAL_BOARD_HEIGHT,
     minesNum = INITIAL_MINES,
-  ) {
+    scheduler,
+  }: {
+    width?: number
+    height?: number
+    minesNum?: number
+    scheduler: AbstractScheduler
+  }) {
+    this.scheduler = scheduler
+
     this.worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
       if (event.data.type === 'GENERATE_BOARD_RESPONSE') {
         this.gameStatus = 'PLAYING'
@@ -74,7 +80,6 @@ export class GameEngine {
         this._emptyTileIndex = event.data.data.emptyTileIndex
 
         this.updateVisibleBoard()
-        this.runGameLoopTimer()
       }
     }
 
@@ -91,10 +96,9 @@ export class GameEngine {
 
   restart({ width, height, minesNum }: InitArgs = {}) {
     this.scheduler.clear()
-    // this.abortTaskController.abort()
-    // this.abortTaskController = new TaskController()
 
     clearTimeout(this._gameTimeoutId!)
+    this._gameTimeoutId = null
     this._gameTimeSeconds = 0
 
     this._width = width ?? this._width
@@ -122,6 +126,10 @@ export class GameEngine {
   flag(index: number) {
     if (this.gameStatus !== 'PLAYING') {
       return
+    }
+
+    if (!this._gameTimeoutId) {
+      this.runGameLoopTimer()
     }
 
     const tile = this._uInt8Array[index]
@@ -183,6 +191,10 @@ export class GameEngine {
       return
     }
 
+    if (!this._gameTimeoutId) {
+      this.runGameLoopTimer()
+    }
+
     const tile = this._uInt8Array[index]
 
     if (!HIDDEN_ENUMS.has(tile)) {
@@ -217,11 +229,7 @@ export class GameEngine {
 
       if (neighborMinesNum === 0) {
         for (const neighborIndex of this.getNeighborsIndexes(index, HIDDEN_ENUMS)) {
-          // scheduler.postTask(() => {
-          //   this.reveal(neighborIndex)
-          // }, { priority: 'background', signal: this.abortTaskController.signal })
-
-          this.scheduler.scheduleLowPriority(() => {
+          this.scheduler.postTask(() => {
             this.reveal(neighborIndex)
           })
         }
