@@ -2,8 +2,10 @@
 
 import type { AbstractScheduler } from '../core/AbstractScheduler'
 import type { MainThreadMessage, WorkerMessage } from './GameWebWorker'
+import type { GameStateSnapshot } from './types'
 import { PubSub } from '../core/PubSub'
 import { EXPLODED_CODE, FLAG_ENUMS, HIDDEN_ENUMS, HIDDEN_MINE_CODE, INITIAL_BOARD_HEIGHT, INITIAL_BOARD_WIDTH, INITIAL_MINES, MINE_ENUMS } from './consts'
+import { SaveManager } from './SaveManager'
 
 interface InitArgs {
   width?: number
@@ -47,6 +49,8 @@ export class GameEngine {
 
   private scheduler: AbstractScheduler
 
+  private saveManager: SaveManager
+
   public offsetX = 0
   public offsetY = 0
   public visibleBoard: Array<{ value: number, index: number }> = []
@@ -63,13 +67,16 @@ export class GameEngine {
     height = INITIAL_BOARD_HEIGHT,
     minesNum = INITIAL_MINES,
     scheduler,
+    saveManager,
   }: {
     width?: number
     height?: number
     minesNum?: number
     scheduler: AbstractScheduler
+    saveManager?: SaveManager
   }) {
     this.scheduler = scheduler
+    this.saveManager = saveManager ?? new SaveManager()
 
     this.worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
       if (event.data.type === 'GENERATE_BOARD_RESPONSE') {
@@ -279,5 +286,109 @@ export class GameEngine {
 
   subscribe(callback: () => void) {
     return this._gameUpdatePubSub.subscribe(callback)
+  }
+
+  /**
+   * Check if game can be saved
+   */
+  private canSave(): boolean {
+    return ['PLAYING', 'DEAD', 'WIN'].includes(this.gameStatus)
+  }
+
+  /**
+   * Create a snapshot of current game state for saving
+   */
+  private createSnapshot(): GameStateSnapshot {
+    return {
+      header: {
+        version: '1.0',
+        savedAt: new Date().toISOString(),
+        width: this._width,
+        height: this._height,
+        minesNum: this._minesNum,
+        minesLeft: this._minesLeft,
+        tilesLeft: this._tilesLeft,
+        gameTimeSeconds: this._gameTimeSeconds,
+        gameStatus: this.gameStatus,
+        offsetX: this.offsetX,
+        offsetY: this.offsetY,
+        userDidFirstMove: this._userDidFirstMove,
+        emptyTileIndex: this._emptyTileIndex,
+      },
+      boardData: new Uint8Array(this._boardBuffer),
+    }
+  }
+
+  /**
+   * Restore game state from a loaded snapshot
+   */
+  private restoreFromSnapshot(snapshot: GameStateSnapshot): void {
+    // Stop current timer
+    clearTimeout(this._gameTimeoutId!)
+    this._gameTimeoutId = null
+
+    // Clear scheduler
+    this.scheduler.clear()
+
+    // Restore fields from header
+    this._width = snapshot.header.width
+    this._height = snapshot.header.height
+    this._minesNum = snapshot.header.minesNum
+    this._minesLeft = snapshot.header.minesLeft
+    this._tilesLeft = snapshot.header.tilesLeft
+    this._gameTimeSeconds = snapshot.header.gameTimeSeconds
+    this.gameStatus = snapshot.header.gameStatus
+    this.offsetX = snapshot.header.offsetX
+    this.offsetY = snapshot.header.offsetY
+    this._userDidFirstMove = snapshot.header.userDidFirstMove
+    this._emptyTileIndex = snapshot.header.emptyTileIndex
+
+    // Restore board data - create a new buffer and copy data
+    const boardSize = this._width * this._height
+    this._boardBuffer = new ArrayBuffer(boardSize)
+    const boardView = new Uint8Array(this._boardBuffer)
+    boardView.set(snapshot.boardData)
+    this._uInt8Array = boardView
+
+    // Restart timer if playing
+    if (this.gameStatus === 'PLAYING') {
+      this.runGameLoopTimer()
+    }
+
+    // Update view
+    this.updateVisibleBoard()
+  }
+
+  /**
+   * Save current game state
+   */
+  async save(): Promise<void> {
+    if (!this.canSave()) {
+      return
+    }
+
+    const snapshot = this.createSnapshot()
+    await this.saveManager.save(snapshot)
+  }
+
+  /**
+   * Load game state from save file
+   * Returns true if loaded successfully, false if no save exists
+   */
+  async load(): Promise<boolean> {
+    const snapshot = await this.saveManager.load()
+    if (!snapshot) {
+      return false
+    }
+
+    this.restoreFromSnapshot(snapshot)
+    return true
+  }
+
+  /**
+   * Check if a save file exists
+   */
+  async hasSave(): Promise<boolean> {
+    return this.saveManager.hasSave()
   }
 }
