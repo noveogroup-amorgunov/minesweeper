@@ -1,6 +1,22 @@
+import type { RandomGenerator } from './types'
+import { createSeededRandom } from '../utils/hashFunctions'
 import { HIDDEN_CODE, HIDDEN_MINE_CODE } from './consts'
 
-export function generateMines(array: Uint8Array, minesNum: number): number {
+export { createSeededRandom }
+
+/**
+ * Generate mines in the array using the provided random generator
+ * Modifies the array in-place and returns the index of the last empty tile
+ * @param array - Uint8Array to fill with mines
+ * @param minesNum - Number of mines to generate
+ * @param random - Random number generator (defaults to Math.random)
+ * @returns Index of the last empty tile (for first move swap)
+ */
+export function generateMines(
+  array: Uint8Array,
+  minesNum: number,
+  random: RandomGenerator = Math.random,
+): number {
   let probability = minesNum / array.length
   let generatedMines = 0
   let emptyTileIndex = 0
@@ -16,7 +32,7 @@ export function generateMines(array: Uint8Array, minesNum: number): number {
       break
     }
 
-    const isMine = Math.random() < probability
+    const isMine = random() < probability
 
     if (isMine) {
       generatedMines += 1
@@ -44,4 +60,15 @@ export function generateMines(array: Uint8Array, minesNum: number): number {
   }
 
   return emptyTileIndex
+}
+
+/**
+ * Wrapper for generating mines with Math.random
+ * Convenience function for backward compatibility
+ * @param array - Uint8Array to fill with mines
+ * @param minesNum - Number of mines to generate
+ * @returns Index of the last empty tile (for first move swap)
+ */
+export function generateMinesRandom(array: Uint8Array, minesNum: number): number {
+  return generateMines(array, minesNum, Math.random)
 }

@@ -2,5 +2,6 @@
   "$schema": "https://opencode.ai/config.json",
   "experimental": {
     "disable_paste_summary": true
-  }
+  },
+  "instructions": ["AGENTS.md", "docs/*.md"]
 }

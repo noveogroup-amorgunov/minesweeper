@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react'
 import { supportNativeScheduler } from '../../core/Scheduler_navite'
+import { useGameEngine } from '../gameContext'
 import { useGameState } from '../useGameState'
 
 const GameStatsState = memo(() => {
@@ -15,6 +16,7 @@ const GameStatsState = memo(() => {
 })
 
 export function GameStats() {
+  const gameEngine = useGameEngine()
   const boardByteLength = useGameState(state => state.boardByteLength)
   const offsetX = useGameState(state => state.offsetX)
   const offsetY = useGameState(state => state.offsetY)
@@ -54,6 +56,16 @@ export function GameStats() {
         SCHEDULER:
         {' '}
         {supportNativeScheduler ? 'NATIVE' : 'CUSTOM'}
+      </div>
+      <div>
+        GENERATION MODE:
+        {' '}
+        {gameEngine.getMode()}
+      </div>
+      <div>
+        ROOT_ID:
+        {' '}
+        {gameEngine.getRoomId()}
       </div>
     </>
   )

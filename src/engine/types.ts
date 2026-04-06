@@ -1,6 +1,16 @@
 import type { GameStatus } from './GameEngine'
 
 /**
+ * Random number generator function type
+ */
+export type RandomGenerator = () => number
+
+/**
+ * Field generation mode - random or seeded for multiplayer
+ */
+export type GenerationMode = 'random' | 'seeded'
+
+/**
  * Save file header containing game metadata
  */
 export interface SaveFileHeader {
@@ -30,6 +40,12 @@ export interface SaveFileHeader {
   userDidFirstMove: boolean
   /** Empty tile index (for first move swap) */
   emptyTileIndex: number
+  /** Field generation mode */
+  generationMode?: GenerationMode
+  /** Seed for deterministic generation (for multiplayer, backward compatibility) */
+  seed?: string
+  /** Room ID for multiplayer mode (replaces seed for new saves) */
+  roomId?: string
 }
 
 /**

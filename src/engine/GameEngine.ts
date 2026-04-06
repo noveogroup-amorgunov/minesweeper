@@ -2,9 +2,18 @@
 
 import type { AbstractScheduler } from '../core/AbstractScheduler'
 import type { MainThreadMessage, WorkerMessage } from './GameWebWorker'
-import type { GameStateSnapshot } from './types'
+import type { GameStateSnapshot, GenerationMode } from './types'
 import { PubSub } from '../core/PubSub'
-import { EXPLODED_CODE, FLAG_ENUMS, HIDDEN_ENUMS, HIDDEN_MINE_CODE, INITIAL_BOARD_HEIGHT, INITIAL_BOARD_WIDTH, INITIAL_MINES, MINE_ENUMS } from './consts'
+import {
+  EXPLODED_CODE,
+  FLAG_ENUMS,
+  HIDDEN_ENUMS,
+  HIDDEN_MINE_CODE,
+  INITIAL_BOARD_HEIGHT,
+  INITIAL_BOARD_WIDTH,
+  INITIAL_MINES,
+  MINE_ENUMS,
+} from './consts'
 import { GameSaveManager } from './GameSaveManager'
 
 interface InitArgs {
@@ -51,11 +60,23 @@ export class GameEngine {
 
   private saveManager: GameSaveManager
 
+  /** Field generation mode - random or seeded for multiplayer */
+  private _generationMode: GenerationMode = 'random'
+
+  /** Room ID for multiplayer mode */
+  private _roomId: string | undefined
+
+  /** Seed for deterministic generation (derived from roomId in seeded mode) */
+  private _seed: string | undefined
+
   public offsetX = 0
   public offsetY = 0
   public visibleBoard: Array<{ value: number, index: number }> = []
 
-  private worker: Worker = new Worker(new URL('./GameWebWorker.ts', import.meta.url), { type: 'module' })
+  private worker: Worker = new Worker(
+    new URL('./GameWebWorker.ts', import.meta.url),
+    { type: 'module' },
+  )
 
   /** Game time in seconds */
   private _gameTimeSeconds = 0
@@ -66,23 +87,34 @@ export class GameEngine {
     width = INITIAL_BOARD_WIDTH,
     height = INITIAL_BOARD_HEIGHT,
     minesNum = INITIAL_MINES,
+    mode = 'random',
     scheduler,
     saveManager,
+    roomId,
   }: {
     width?: number
     height?: number
     minesNum?: number
+    mode?: GenerationMode
     scheduler: AbstractScheduler
     saveManager?: GameSaveManager
+    roomId?: string
   }) {
     this.scheduler = scheduler
     this.saveManager = saveManager ?? new GameSaveManager()
+    this._generationMode = mode
+
+    // Store roomId and generate seed for seeded mode
+    if (mode === 'seeded' && roomId) {
+      this._roomId = roomId
+      this._seed = roomId // Use roomId as seed for deterministic generation
+    }
 
     this.worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
       if (event.data.type === 'GENERATE_BOARD_RESPONSE') {
         this.gameStatus = 'PLAYING'
 
-        this._boardBuffer = event.data.data.buffer
+        this._boardBuffer = event.data.data.buffer as ArrayBuffer
         this._uInt8Array = new Uint8Array(this._boardBuffer)
         this._emptyTileIndex = event.data.data.emptyTileIndex
 
@@ -91,6 +123,30 @@ export class GameEngine {
     }
 
     this.restart({ width, height, minesNum })
+  }
+
+  /**
+   * Get the current generation mode
+   * @returns 'random' or 'seeded'
+   */
+  getMode(): GenerationMode {
+    return this._generationMode
+  }
+
+  /**
+   * Get the room ID for multiplayer mode
+   * @returns Room ID for seeded mode, undefined for random mode
+   */
+  getRoomId(): string | undefined {
+    return this._roomId
+  }
+
+  /**
+   * Get the seed for seeded generation mode
+   * @returns Seed string for seeded mode, undefined for random mode
+   */
+  getSeed(): string | undefined {
+    return this._seed
   }
 
   runGameLoopTimer() {
@@ -124,8 +180,20 @@ export class GameEngine {
 
     this.updateVisibleBoard()
 
+    // Prepare worker message payload based on generation mode
+    const payload: WorkerMessage['payload'] = {
+      array: this._uInt8Array,
+      minesNum: this._minesNum,
+      mode: this._generationMode,
+    }
+
+    // Only include seed for seeded mode
+    if (this._generationMode === 'seeded' && this._seed) {
+      payload.seed = this._seed
+    }
+
     this.worker.postMessage(
-      { type: 'GENERATE_BOARD_REQUEST', payload: { array: this._uInt8Array, minesNum: this._minesNum } } as WorkerMessage,
+      { type: 'GENERATE_BOARD_REQUEST', payload } as WorkerMessage,
       [this._boardBuffer],
     )
   }
@@ -230,12 +298,16 @@ export class GameEngine {
     if (HIDDEN_ENUMS.has(tile)) {
       this._tilesLeft -= 1
 
-      const neighborMinesNum = [...this.getNeighborsIndexes(index, MINE_ENUMS)].length
+      const neighborMinesNum = [...this.getNeighborsIndexes(index, MINE_ENUMS)]
+        .length
 
       this._uInt8Array[index] = neighborMinesNum
 
       if (neighborMinesNum === 0) {
-        for (const neighborIndex of this.getNeighborsIndexes(index, HIDDEN_ENUMS)) {
+        for (const neighborIndex of this.getNeighborsIndexes(
+          index,
+          HIDDEN_ENUMS,
+        )) {
           this.scheduler.postTask(() => {
             this.reveal(neighborIndex)
           })
@@ -266,12 +338,7 @@ export class GameEngine {
         if (dx !== 0 || dy !== 0) {
           const x2 = x + dx
           const y2 = y + dy
-          if (
-            x2 >= 0
-            && x2 < this._width
-            && y2 >= 0
-            && y2 < this._height
-          ) {
+          if (x2 >= 0 && x2 < this._width && y2 >= 0 && y2 < this._height) {
             const i = this._width * y2 + x2
             if (_set.has(this._uInt8Array[i]) && i !== index) {
               res.push(i)
@@ -314,6 +381,9 @@ export class GameEngine {
         offsetY: this.offsetY,
         userDidFirstMove: this._userDidFirstMove,
         emptyTileIndex: this._emptyTileIndex,
+        generationMode: this._generationMode,
+        roomId: this._roomId,
+        seed: this._seed,
       },
       boardData: new Uint8Array(this._boardBuffer),
     }
@@ -342,6 +412,13 @@ export class GameEngine {
     this.offsetY = snapshot.header.offsetY
     this._userDidFirstMove = snapshot.header.userDidFirstMove
     this._emptyTileIndex = snapshot.header.emptyTileIndex
+
+    // Restore generation mode, roomId and seed (for backward compatibility)
+    this._generationMode = snapshot.header.generationMode ?? 'random'
+    // Prefer roomId over seed (new saves use roomId, old saves use seed)
+    this._roomId = snapshot.header.roomId ?? snapshot.header.seed
+    // seed is derived from roomId
+    this._seed = this._roomId
 
     // Restore board data - create a new buffer and copy data
     const boardSize = this._width * this._height

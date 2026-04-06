@@ -7,7 +7,7 @@
 - [x] Storage map in a binary data (`ArrayBuffer`, `UInt8Array`)
 - [x] Generate map inside the Web Workers (Web Workers, Transferable objects)
 - [x] Scheduler for recursive map opening (Scheduler.postTask, Priotity queue)
-- [ ] Deterministic field generation by seed (cyrb128 + sfc32 PRNG)
+- [x] Deterministic field generation by seed (cyrb128 + sfc32 PRNG)
 - [ ] Leaderboard
 - [ ] Write wrapper for Scheduler + polyfill
 - [ ] Save and load the game from file (OPFS)

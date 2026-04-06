@@ -9,6 +9,7 @@ import { createGlobalStyle, ThemeProvider } from 'styled-components'
 import { Scheduler } from './core/Scheduler'
 import { SchedulerNavite, supportNativeScheduler } from './core/Scheduler_navite'
 import { GameEngine } from './engine/GameEngine'
+import { generateRoomId } from './utils/generateRandomId'
 import { AutoSaveIndicator } from './view/game/AutoSaveIndicator'
 import { GameView } from './view/game/GameView'
 import { GameEngineProvider } from './view/gameContext'
@@ -41,10 +42,15 @@ const GlobalStyles = createGlobalStyle`
   }
 `
 
+// Generate a unique room ID for this game session
+const roomId = generateRoomId()
+
 const gameEngine = new GameEngine({
+  mode: 'seeded',
   scheduler: supportNativeScheduler
     ? new SchedulerNavite()
     : new Scheduler(),
+  roomId,
 })
 
 export function App() {
