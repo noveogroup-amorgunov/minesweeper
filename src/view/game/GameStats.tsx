@@ -63,9 +63,9 @@ export function GameStats() {
         {gameEngine.getMode()}
       </div>
       <div>
-        GENERATION SEED:
+        ROOT_ID:
         {' '}
-        {gameEngine.getSeed()}
+        {gameEngine.getRoomId()}
       </div>
     </>
   )

@@ -63,7 +63,10 @@ export class GameEngine {
   /** Field generation mode - random or seeded for multiplayer */
   private _generationMode: GenerationMode = 'random'
 
-  /** Seed for deterministic generation (used in seeded mode) */
+  /** Room ID for multiplayer mode */
+  private _roomId: string | undefined
+
+  /** Seed for deterministic generation (derived from roomId in seeded mode) */
   private _seed: string | undefined
 
   public offsetX = 0
@@ -80,28 +83,6 @@ export class GameEngine {
 
   private _gameTimeoutId: ReturnType<typeof setTimeout> | null = null
 
-  /**
-   * Generates a cryptographically secure random room ID
-   * @param length - Length of the room ID (default: 10)
-   * @returns Base62 room ID (0-9, a-z, A-Z)
-   */
-  static generateRoomId(length = 10): string {
-    const alphabet
-      = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    const result: string[] = []
-
-    // Use crypto.getRandomValues for cryptographically secure randomness
-    const randomBytes = new Uint8Array(length)
-    crypto.getRandomValues(randomBytes)
-
-    for (let i = 0; i < length; i++) {
-      // Map random byte to alphabet index
-      result.push(alphabet[randomBytes[i] % alphabet.length])
-    }
-
-    return result.join('')
-  }
-
   constructor({
     width = INITIAL_BOARD_WIDTH,
     height = INITIAL_BOARD_HEIGHT,
@@ -109,6 +90,7 @@ export class GameEngine {
     mode = 'random',
     scheduler,
     saveManager,
+    roomId,
   }: {
     width?: number
     height?: number
@@ -116,14 +98,16 @@ export class GameEngine {
     mode?: GenerationMode
     scheduler: AbstractScheduler
     saveManager?: GameSaveManager
+    roomId?: string
   }) {
     this.scheduler = scheduler
     this.saveManager = saveManager ?? new GameSaveManager()
     this._generationMode = mode
 
-    // Generate seed automatically if in seeded mode
-    if (mode === 'seeded') {
-      this._seed = GameEngine.generateRoomId()
+    // Store roomId and generate seed for seeded mode
+    if (mode === 'seeded' && roomId) {
+      this._roomId = roomId
+      this._seed = roomId // Use roomId as seed for deterministic generation
     }
 
     this.worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
@@ -147,6 +131,14 @@ export class GameEngine {
    */
   getMode(): GenerationMode {
     return this._generationMode
+  }
+
+  /**
+   * Get the room ID for multiplayer mode
+   * @returns Room ID for seeded mode, undefined for random mode
+   */
+  getRoomId(): string | undefined {
+    return this._roomId
   }
 
   /**
@@ -390,6 +382,7 @@ export class GameEngine {
         userDidFirstMove: this._userDidFirstMove,
         emptyTileIndex: this._emptyTileIndex,
         generationMode: this._generationMode,
+        roomId: this._roomId,
         seed: this._seed,
       },
       boardData: new Uint8Array(this._boardBuffer),
@@ -420,9 +413,12 @@ export class GameEngine {
     this._userDidFirstMove = snapshot.header.userDidFirstMove
     this._emptyTileIndex = snapshot.header.emptyTileIndex
 
-    // Restore generation mode and seed (for backward compatibility)
+    // Restore generation mode, roomId and seed (for backward compatibility)
     this._generationMode = snapshot.header.generationMode ?? 'random'
-    this._seed = snapshot.header.seed
+    // Prefer roomId over seed (new saves use roomId, old saves use seed)
+    this._roomId = snapshot.header.roomId ?? snapshot.header.seed
+    // seed is derived from roomId
+    this._seed = this._roomId
 
     // Restore board data - create a new buffer and copy data
     const boardSize = this._width * this._height

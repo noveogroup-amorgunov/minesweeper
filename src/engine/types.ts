@@ -42,8 +42,10 @@ export interface SaveFileHeader {
   emptyTileIndex: number
   /** Field generation mode */
   generationMode?: GenerationMode
-  /** Seed for deterministic generation (for multiplayer) */
+  /** Seed for deterministic generation (for multiplayer, backward compatibility) */
   seed?: string
+  /** Room ID for multiplayer mode (replaces seed for new saves) */
+  roomId?: string
 }
 
 /**

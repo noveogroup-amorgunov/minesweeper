@@ -21,6 +21,7 @@ Minesweeper game with a 10000x10000 field (10⁸ tiles) on React.
 src/
   core/          # PubSub, Scheduler (priority queue), polyfills
   engine/        # GameEngine, Web Worker for map generation
+  utils/         # Utilities: hashFunctions, generateRandomId
   view/          # React components (react95 UI library)
 ```
 
@@ -42,22 +43,27 @@ Two generation modes supported:
 
 ```typescript
 // Random mode (default)
-const engine = new GameEngine({ mode: 'random', scheduler })
+// Seeded mode for multiplayer - roomId must be provided from outside
+import { generateRoomId } from './utils/generateRandomId'
 
-// Seeded mode for multiplayer
-const engine = new GameEngine({ mode: 'seeded', scheduler })
-const roomId = engine.getSeed() // Auto-generated Base62 ID
+const engine = new GameEngine({ mode: 'random', scheduler })
+const roomId = generateRoomId()
+const engine = new GameEngine({ mode: 'seeded', scheduler, roomId })
 ```
 
 ### PRNG Implementation
 
-The deterministic generator uses:
+The deterministic generator uses functions from `src/utils/hashFunctions.ts`:
 - **cyrb128**: String hashing to 128-bit state (4 x 32-bit numbers)
 - **sfc32**: Small Fast Counter 32-bit PRNG
 
 ```typescript
+// src/utils/hashFunctions.ts
+export function cyrb128(str: string): [number, number, number, number]
+export function sfc32(a: number, b: number, c: number, d: number): RandomGenerator
+export function createSeededRandom(seed: string): RandomGenerator
+
 // src/engine/generateMines.ts
-export function createSeededRandom(seed: string): () => number
 export function generateMines(
   array: Uint8Array,
   minesNum: number,
@@ -65,12 +71,44 @@ export function generateMines(
 ): number
 ```
 
-### Room ID Format
+### Room ID Generation
 
-- Base62 alphabet: `0-9a-zA-Z` (62 characters)
-- Default length: 10 characters
-- Generated using `crypto.getRandomValues()` for cryptographic security
-- Collision probability: ~1.5% for 100 IDs with 10 characters
+Room IDs are generated outside GameEngine using `generateRoomId()` from `src/utils/generateRandomId.ts`:
+
+```typescript
+import { generateRandomId, generateRoomId } from './utils/generateRandomId'
+
+// Generate room ID (default 10 characters)
+const roomId = generateRoomId() // e.g., "aB3xK9mP2q"
+
+// Generate custom length ID
+const longId = generateRoomId(12) // 12 characters
+const customId = generateRandomId(8) // 8 characters
+```
+
+- **Base62 alphabet**: `0-9a-zA-Z` (62 characters)
+- **Default length**: 10 characters
+- **Generated using** `crypto.getRandomValues()` for cryptographic security
+- **Collision probability**: ~1.5% for 100 IDs with 10 characters
+
+### GameEngine Constructor
+
+GameEngine accepts an optional `roomId` parameter for seeded mode:
+
+```typescript
+const engine = new GameEngine({
+  width: 100,
+  height: 100,
+  minesNum: 1000,
+  mode: 'seeded',
+  scheduler: new Scheduler(),
+  roomId: 'aB3xK9mP2q', // Room ID used as seed for deterministic generation
+})
+
+// Access the roomId and seed
+const currentRoomId = engine.getRoomId() // 'aB3xK9mP2q'
+const currentSeed = engine.getSeed() // Same as roomId in seeded mode
+```
 
 ## Critical Implementation Details
 
@@ -98,6 +136,7 @@ import { initReactScan } from './view/reactScan'
   - `src/engine/GameEngine.spec.ts` — GameEngine tests
   - `src/engine/integration.spec.ts` — Integration tests
   - `src/engine/SaveManager.spec.ts` — Save/Load tests
+  - `src/utils/generateRandomId.spec.ts` — Random ID generation tests
 - Run: `pnpm test`
 
 ### Linting & Formatting
