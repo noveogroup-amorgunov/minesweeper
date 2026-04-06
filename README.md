@@ -8,26 +8,18 @@ Minesweeper game with a 10000x10000 field (10⁸ tiles). Play online: https://mi
 
 ## About the project
 
-It's a pet project and an experimental playground to try modern (and, for me, new) web technologies and algorithms.
+It's a pet project and an experimental playground to try modern web technologies and algorithms.
 
-## Roadmap
-
-- [x] Game engine (PubSub pattern)
-- [x] UI layer (React, React95)
-- [x] Storage map in a binary data (`ArrayBuffer`, `UInt8Array`)
-- [x] Generate map inside the Web Workers (Web Workers, Transferable objects)
-- [x] Scheduler for recursive map opening (Scheduler.postTask, Priotity queue)
-- [ ] Leaderboard
-- [ ] Write wrapper for Scheduler + polyfill
-- [ ] Save and load the game from file (OPFS)
-- [ ] Multiplayer mode (WebSockets, WebRTC)
-- [ ] Local-first mode (PWA, CRDT)
-
-## Running locally
+## Run locally
 
 ```bash
-pnpm i
+# with pnpm
+pnpm install
 pnpm dev
+
+# or with npm
+npm install
+npm run dev
 ```
 
 ## Troubleshooting
