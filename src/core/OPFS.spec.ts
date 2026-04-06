@@ -1,7 +1,55 @@
-import type { GameStateSnapshot } from './types'
-import { describe, expect, it, vi } from 'vitest'
-import { SaveFileCorruptedError, SaveValidationError, SaveVersionError } from './errors'
-import { SaveManager } from './SaveManager'
+import type { GameStateSnapshot } from '../engine/types'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+// Import mocked functions
+import {
+  deleteFile,
+  fileExists,
+  listFiles,
+  readFile,
+  writeFile,
+} from '../core/OPFS'
+
+import { SaveFileCorruptedError, SaveValidationError, SaveVersionError } from '../engine/errors'
+
+// Import GameSaveManager after mock is set up
+import { GameSaveManager } from '../engine/GameSaveManager'
+
+// Mock storage for OPFS operations
+const mockFileStorage = new Map<string, Uint8Array>()
+
+// Reset storage before each test
+beforeEach(() => {
+  mockFileStorage.clear()
+})
+
+// Mock OPFS module using vi.mock (hoisted by vitest)
+vi.mock('../core/OPFS', async (importOriginal) => {
+  return {
+    ...await importOriginal<typeof import('../core/OPFS')>(),
+    isOPFSSupported: vi.fn(() => true),
+    writeFile: vi.fn(async (filename: string, data: ArrayBuffer) => {
+      mockFileStorage.set(filename, new Uint8Array(data))
+    }),
+    readFile: vi.fn(async (filename: string): Promise<ArrayBuffer | null> => {
+      const data = mockFileStorage.get(filename)
+      if (!data)
+        return null
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+    }),
+    fileExists: vi.fn(async (filename: string): Promise<boolean> => {
+      return mockFileStorage.has(filename)
+    }),
+    deleteFile: vi.fn(async (filename: string) => {
+      mockFileStorage.delete(filename)
+    }),
+    listFiles: vi.fn(async (pattern?: RegExp): Promise<string[]> => {
+      const files = Array.from(mockFileStorage.keys())
+      if (!pattern)
+        return files
+      return files.filter(f => pattern.test(f))
+    }),
+  }
+})
 
 function createTestSnapshot(): GameStateSnapshot {
   const width = 10
@@ -28,70 +76,52 @@ function createTestSnapshot(): GameStateSnapshot {
   }
 }
 
-describe('saveManager', () => {
-  // Mock OPFS
-  const mockFileHandles = new Map<string, { data: Uint8Array | null }>()
+describe('opfs', () => {
+  it('should write and read file', async () => {
+    const data = new Uint8Array([1, 2, 3, 4, 5])
 
-  // Mock navigator.storage.getDirectory
-  const mockGetDirectory = vi.fn(async () => ({
-    getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
-      if (!mockFileHandles.has(name)) {
-        if (options?.create) {
-          mockFileHandles.set(name, { data: null })
-        }
-        else {
-          const error = new DOMException('File not found', 'NotFoundError')
-          throw error
-        }
-      }
-      return {
-        getFile: vi.fn(async () => ({
-          arrayBuffer: vi.fn(async () => {
-            const fileData = mockFileHandles.get(name)?.data
-            if (!fileData) {
-              throw new DOMException('File not found', 'NotFoundError')
-            }
-            return fileData.buffer.slice(
-              fileData.byteOffset,
-              fileData.byteOffset + fileData.byteLength,
-            )
-          }),
-        })),
-        createWritable: vi.fn(async () => {
-          const chunks: Uint8Array[] = []
-          return {
-            write: vi.fn(async (data: ArrayBuffer) => {
-              chunks.push(new Uint8Array(data))
-            }),
-            close: vi.fn(async () => {
-              const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-              const combined = new Uint8Array(totalLength)
-              let offset = 0
-              for (const chunk of chunks) {
-                combined.set(chunk, offset)
-                offset += chunk.length
-              }
-              mockFileHandles.set(name, { data: combined })
-            }),
-          }
-        }),
-      }
-    }),
-    removeEntry: vi.fn(async (name: string) => {
-      mockFileHandles.delete(name)
-    }),
-  }))
+    await writeFile('test.dat', data.buffer)
+    const read = await readFile('test.dat')
 
-  // Setup mock before each test
-  vi.stubGlobal('navigator', {
-    storage: {
-      getDirectory: mockGetDirectory,
-    },
+    expect(read).not.toBeNull()
+    expect(new Uint8Array(read!)).toEqual(data)
   })
 
+  it('should return null for non-existent file', async () => {
+    const result = await readFile('nonexistent.dat')
+    expect(result).toBeNull()
+  })
+
+  it('should check file existence', async () => {
+    expect(await fileExists('test.dat')).toBe(false)
+
+    await writeFile('test.dat', new ArrayBuffer(1))
+    expect(await fileExists('test.dat')).toBe(true)
+  })
+
+  it('should delete file', async () => {
+    await writeFile('test.dat', new ArrayBuffer(1))
+    expect(await fileExists('test.dat')).toBe(true)
+
+    await deleteFile('test.dat')
+    expect(await fileExists('test.dat')).toBe(false)
+  })
+
+  it('should list files with pattern', async () => {
+    await writeFile('savegame.dat', new ArrayBuffer(1))
+    await writeFile('savegame-slot1.dat', new ArrayBuffer(1))
+    await writeFile('other.dat', new ArrayBuffer(1))
+
+    const files = await listFiles(/^savegame.*\.dat$/)
+    expect(files).toContain('savegame.dat')
+    expect(files).toContain('savegame-slot1.dat')
+    expect(files).not.toContain('other.dat')
+  })
+})
+
+describe('gameSaveManager', () => {
   it('should save and load game state', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     const state = createTestSnapshot()
 
     await manager.save(state)
@@ -103,41 +133,36 @@ describe('saveManager', () => {
   })
 
   it('should return null when no save exists', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     const loaded = await manager.load()
     expect(loaded).toBeNull()
   })
 
   it('should return false for hasSave when no file exists', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     const hasSave = await manager.hasSave()
     expect(hasSave).toBe(false)
   })
 
   it('should return true for hasSave when file exists', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     await manager.save(createTestSnapshot())
     const hasSave = await manager.hasSave()
     expect(hasSave).toBe(true)
   })
 
   it('should throw SaveFileCorruptedError on invalid magic header', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
 
     // Create a file with invalid magic header
     const invalidData = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00])
-    mockFileHandles.set('savegame.dat', { data: invalidData })
+    mockFileStorage.set('savegame.dat', invalidData)
 
     await expect(manager.load()).rejects.toThrow(SaveFileCorruptedError)
   })
 
   it('should throw SaveFileCorruptedError on invalid JSON in header', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
 
     // Create valid magic + version + header length, but invalid JSON
     const magic = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00]) // MINESWP\0
@@ -152,14 +177,13 @@ describe('saveManager', () => {
     combined.set(headerLength, magic.length + version.length)
     combined.set(invalidJson, magic.length + version.length + headerLength.length)
 
-    mockFileHandles.set('savegame.dat', { data: combined })
+    mockFileStorage.set('savegame.dat', combined)
 
     await expect(manager.load()).rejects.toThrow(SaveFileCorruptedError)
   })
 
   it('should throw SaveVersionError on unsupported version', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
 
     // Create valid magic + unsupported version
     const magic = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00]) // MINESWP\0
@@ -174,14 +198,13 @@ describe('saveManager', () => {
     combined.set(headerLength, magic.length + version.length)
     combined.set(emptyJson, magic.length + version.length + headerLength.length)
 
-    mockFileHandles.set('savegame.dat', { data: combined })
+    mockFileStorage.set('savegame.dat', combined)
 
     await expect(manager.load()).rejects.toThrow(SaveVersionError)
   })
 
   it('should throw SaveValidationError on missing required fields', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
 
     // Create valid magic + version + header with missing fields
     const magic = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00])
@@ -197,14 +220,13 @@ describe('saveManager', () => {
     combined.set(headerLength, magic.length + version.length)
     combined.set(headerBytes, magic.length + version.length + headerLength.length)
 
-    mockFileHandles.set('savegame.dat', { data: combined })
+    mockFileStorage.set('savegame.dat', combined)
 
     await expect(manager.load()).rejects.toThrow(SaveValidationError)
   })
 
   it('should throw SaveValidationError on board size mismatch', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
 
     // Create valid header but wrong board size
     const magic = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00])
@@ -238,14 +260,13 @@ describe('saveManager', () => {
     combined.set(headerBytes, magic.length + version.length + headerLength.length)
     combined.set(wrongBoardData, magic.length + version.length + headerLength.length + headerBytes.length)
 
-    mockFileHandles.set('savegame.dat', { data: combined })
+    mockFileStorage.set('savegame.dat', combined)
 
     await expect(manager.load()).rejects.toThrow(SaveValidationError)
   })
 
   it('should support slot switching', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager({ slotId: 'slot1' })
+    const manager = new GameSaveManager({ slotId: 'slot1' })
 
     const state1 = createTestSnapshot()
     state1.header.savedAt = '2024-01-01T00:00:00.000Z'
@@ -266,8 +287,7 @@ describe('saveManager', () => {
   })
 
   it('should delete save file', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     await manager.save(createTestSnapshot())
 
     expect(await manager.hasSave()).toBe(true)
@@ -276,17 +296,32 @@ describe('saveManager', () => {
   })
 
   it('should return empty array for getAvailableSlots when no saves exist', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     const slots = await manager.getAvailableSlots()
     expect(slots).toEqual([])
   })
 
   it('should return default slot for getAvailableSlots when save exists', async () => {
-    mockFileHandles.clear()
-    const manager = new SaveManager()
+    const manager = new GameSaveManager()
     await manager.save(createTestSnapshot())
     const slots = await manager.getAvailableSlots()
     expect(slots).toEqual(['default'])
+  })
+
+  it('should return multiple slots for getAvailableSlots', async () => {
+    // Create saves for different slots directly
+    const manager1 = new GameSaveManager({ slotId: 'slot1' })
+    const manager2 = new GameSaveManager({ slotId: 'slot2' })
+    const defaultManager = new GameSaveManager()
+
+    await manager1.save(createTestSnapshot())
+    await manager2.save(createTestSnapshot())
+    await defaultManager.save(createTestSnapshot())
+
+    const slots = await defaultManager.getAvailableSlots()
+    expect(slots).toContain('default')
+    expect(slots).toContain('slot1')
+    expect(slots).toContain('slot2')
+    expect(slots.length).toBe(3)
   })
 })

@@ -7,7 +7,7 @@
 - [x] Storage map in a binary data (`ArrayBuffer`, `UInt8Array`)
 - [x] Generate map inside the Web Workers (Web Workers, Transferable objects)
 - [x] Scheduler for recursive map opening (Scheduler.postTask, Priotity queue)
-- [x] Deterministic field generation by seed (cyrb128 + sfc32 PRNG)
+- [ ] Deterministic field generation by seed (cyrb128 + sfc32 PRNG)
 - [ ] Leaderboard
 - [ ] Write wrapper for Scheduler + polyfill
 - [ ] Save and load the game from file (OPFS)
@@ -15,10 +15,6 @@
 - [ ] Local-first mode (PWA, CRDT)
 
 ## Details draft nodes
-
-### Сохранение и загрузка игры (OPFS)
-
-Себе, чтобы не забыть, нужно немного префакторить SaveManager. Всю специфичную часть касательно игры внести либо в GameEngine, либо в GameSaveManager. А всю абстрактную часть по работе с OPFS перенести в src.core директорию.
 
 ### Реализовать бекенд
 

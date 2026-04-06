@@ -5,13 +5,13 @@ Minesweeper game with a 10000x10000 field (10⁸ tiles) on React.
 ## Commands
 
 - `pnpm dev` - Start dev server
-- `pnpm tests` - Run tests
+- `pnpm test` - Run tests
 - `pnpm lint:fix` - Run eslint with autofix mode
 - `pnpm lint:types` - Check TypeScript types
 
 ## Rules
 
-- After you finish write code ALWAYS check types (`pnpm lint:types`), lint (`pnpm lint:fix`) and run tests (`pnpm tests`)
+- After you finish write code ALWAYS check types (`pnpm lint:types`), lint (`pnpm lint:fix`) and run tests (`pnpm test`)
 
 ## Architecture Overview
 

@@ -373,6 +373,34 @@
 
 ---
 
+## Phase 7: Refactoring
+
+### Task 7.1: Refactor SaveManager Architecture
+**Files:** `src/engine/SaveManager.ts`, `src/engine/GameSaveManager.ts`, `src/core/OPFS.ts`
+**Description:** Split SaveManager into abstract OPFS layer and game-specific implementation
+**Acceptance Criteria:**
+- [ ] Create `src/core/OPFS.ts` with abstract OPFS operations:
+  - `writeFile(filename: string, data: ArrayBuffer): Promise<void>`
+  - `readFile(filename: string): Promise<ArrayBuffer | null>`
+  - `fileExists(filename: string): Promise<boolean>`
+  - Proper error handling with custom error types
+- [ ] Create `src/engine/GameSaveManager.ts` extending/ composing OPFS functionality:
+  - Import and use `OPFS` for file operations
+  - Keep game-specific logic: serialization format, header structure, validation
+  - Keep `save()`, `load()`, `hasSave()` methods with same signatures
+  - Handle game-specific errors (corrupted file, version mismatch, etc.)
+- [ ] Refactor `src/engine/SaveManager.ts`:
+  - Either convert to thin wrapper/alias for GameSaveManager
+  - Or remove and update all imports to use GameSaveManager directly
+- [ ] Update existing tests to work with new structure:
+  - Mock OPFS layer for unit tests
+  - Move SaveManager.spec.ts tests to appropriate locations
+- [ ] Ensure no breaking changes to GameEngine API
+
+**Estimation:** 2 hours
+
+---
+
 ## Phase 6: Polish and Testing
 
 ### Task 6.1: Manual Testing Checklist
@@ -420,7 +448,8 @@
 | Phase 4: GameView Integration | 5 tasks | ~2 hours |
 | Phase 5: Auto-Save | 3 tasks | ~1.5 hours |
 | Phase 6: Polish | 2 tasks | ~1.5 hours |
-| **Total** | **27 tasks** | **~17 hours** |
+| Phase 7: Refactoring | 1 task | ~2 hours |
+| **Total** | **28 tasks** | **~19 hours** |
 
 ## Dependencies
 
@@ -432,10 +461,12 @@ Task 2.1 → Task 2.2 → Task 2.3 → Task 2.4 → Task 2.5 → Task 2.6 → Ta
                               Task 3.1 → Task 3.2 → Task 3.3
                                        ↓
 Task 4.1 → Task 4.2 → Task 4.3 → Task 4.4 → Task 4.5
-   ↓
+    ↓
 Task 5.1 → Task 5.2 → Task 5.3
-   ↓
+    ↓
 Task 6.1 → Task 6.2
+
+Task 7.1 (can be done in parallel with Phase 6 or after)
 ```
 
 ## Notes
@@ -445,3 +476,4 @@ Task 6.1 → Task 6.2
 - Phase 4 depends on both Phase 2 and Phase 3
 - Phase 5 depends on Phase 4
 - Phase 6 (testing) should be done after all other phases
+- Phase 7 (refactoring) can be done in parallel with Phase 6 or after all other phases

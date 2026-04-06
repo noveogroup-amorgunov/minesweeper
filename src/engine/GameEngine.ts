@@ -5,7 +5,7 @@ import type { MainThreadMessage, WorkerMessage } from './GameWebWorker'
 import type { GameStateSnapshot } from './types'
 import { PubSub } from '../core/PubSub'
 import { EXPLODED_CODE, FLAG_ENUMS, HIDDEN_ENUMS, HIDDEN_MINE_CODE, INITIAL_BOARD_HEIGHT, INITIAL_BOARD_WIDTH, INITIAL_MINES, MINE_ENUMS } from './consts'
-import { SaveManager } from './SaveManager'
+import { GameSaveManager } from './GameSaveManager'
 
 interface InitArgs {
   width?: number
@@ -49,7 +49,7 @@ export class GameEngine {
 
   private scheduler: AbstractScheduler
 
-  private saveManager: SaveManager
+  private saveManager: GameSaveManager
 
   public offsetX = 0
   public offsetY = 0
@@ -73,10 +73,10 @@ export class GameEngine {
     height?: number
     minesNum?: number
     scheduler: AbstractScheduler
-    saveManager?: SaveManager
+    saveManager?: GameSaveManager
   }) {
     this.scheduler = scheduler
-    this.saveManager = saveManager ?? new SaveManager()
+    this.saveManager = saveManager ?? new GameSaveManager()
 
     this.worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
       if (event.data.type === 'GENERATE_BOARD_RESPONSE') {
