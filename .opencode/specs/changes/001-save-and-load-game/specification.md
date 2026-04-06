@@ -34,29 +34,29 @@ Binary format with JSON header:
 ```typescript
 interface SaveFileHeader {
   // Format version
-  version: string;              // "1.0"
-  
+  version: string // "1.0"
+
   // Save timestamp (ISO 8601)
-  savedAt: string;              // "2024-01-15T10:30:00.000Z"
-  
+  savedAt: string // "2024-01-15T10:30:00.000Z"
+
   // Board parameters
-  width: number;                // Board width (e.g., 10000)
-  height: number;               // Board height (e.g., 10000)
-  minesNum: number;             // Total mines count
-  
+  width: number // Board width (e.g., 10000)
+  height: number // Board height (e.g., 10000)
+  minesNum: number // Total mines count
+
   // Game state
-  minesLeft: number;            // Remaining unflagged mines
-  tilesLeft: number;            // Rem unrevealed tiles
-  gameTimeSeconds: number;      // Elapsed time in seconds
-  gameStatus: 'PLAYING' | 'DEAD' | 'WIN';  // Current status
-  
+  minesLeft: number // Remaining unflagged mines
+  tilesLeft: number // Rem unrevealed tiles
+  gameTimeSeconds: number // Elapsed time in seconds
+  gameStatus: 'PLAYING' | 'DEAD' | 'WIN' // Current status
+
   // View position
-  offsetX: number;              // Viewport X coordinate
-  offsetY: number;              // Viewport Y coordinate
-  
+  offsetX: number // Viewport X coordinate
+  offsetY: number // Viewport Y coordinate
+
   // Internal state
-  userDidFirstMove: boolean;    // Whether first move was made
-  emptyTileIndex: number;       // Empty tile index (for first move swap)
+  userDidFirstMove: boolean // Whether first move was made
+  emptyTileIndex: number // Empty tile index (for first move swap)
 }
 ```
 
@@ -87,13 +87,13 @@ interface SaveFileHeader {
 ```typescript
 class SaveManager {
   constructor(options?: { slotId?: string })
-  
+
   // Core methods
   save(gameState: GameStateSnapshot): Promise<void>
   load(): Promise<GameStateSnapshot | null>
   hasSave(): Promise<boolean>
   deleteSave(): Promise<void>
-  
+
   // Slot support (for future multi-slot feature)
   getCurrentSlot(): string
   setSlot(slotId: string): void
@@ -376,10 +376,10 @@ Auto-dismiss after 2 seconds.
 
 **OPFS Check:**
 ```typescript
-const isOPFSSupported = 
-  typeof navigator !== 'undefined' && 
-  'storage' in navigator && 
-  'getDirectory' in navigator.storage
+const isOPFSSupported
+  = typeof navigator !== 'undefined'
+    && 'storage' in navigator
+    && 'getDirectory' in navigator.storage
 ```
 
 **Behavior if not supported:**
@@ -466,36 +466,36 @@ describe('SaveManager', () => {
   it('should save and load game state', async () => {
     const manager = new SaveManager()
     const state = createTestGameState()
-    
+
     await manager.save(state)
     const loaded = await manager.load()
-    
+
     expect(loaded).toEqual(state)
   })
-  
+
   it('should return null when no save exists', async () => {
     const manager = new SaveManager()
     const loaded = await manager.load()
     expect(loaded).toBeNull()
   })
-  
+
   it('should throw on corrupted save file', async () => {
     writeCorruptedFile()
     const manager = new SaveManager()
     await expect(manager.load()).rejects.toThrow(SaveFileCorruptedError)
   })
-  
+
   it('should support slot switching', async () => {
     const manager = new SaveManager({ slotId: 'slot1' })
     await manager.save(state1)
-    
+
     manager.setSlot('slot2')
     await manager.save(state2)
-    
+
     manager.setSlot('slot1')
     const loaded1 = await manager.load()
     expect(loaded1).toEqual(state1)
-    
+
     manager.setSlot('slot2')
     const loaded2 = await manager.load()
     expect(loaded2).toEqual(state2)
@@ -591,32 +591,34 @@ src/
 ```typescript
 class GameEngine {
   private saveManager: SaveManager
-  
+
   constructor(options: { scheduler: AbstractScheduler, saveManager?: SaveManager }) {
     this.scheduler = options.scheduler
     this.saveManager = options.saveManager || new SaveManager()
     // ...
   }
-  
+
   async save(): Promise<void> {
-    if (!this.canSave()) return
-    
+    if (!this.canSave())
+      return
+
     const snapshot = this.createSnapshot()
     await this.saveManager.save(snapshot)
   }
-  
+
   async load(): Promise<boolean> {
     const snapshot = await this.saveManager.load()
-    if (!snapshot) return false
-    
+    if (!snapshot)
+      return false
+
     this.restoreFromSnapshot(snapshot)
     return true
   }
-  
+
   async hasSave(): Promise<boolean> {
     return this.saveManager.hasSave()
   }
-  
+
   private createSnapshot(): GameStateSnapshot {
     return {
       width: this._width,
@@ -633,15 +635,15 @@ class GameEngine {
       boardData: new Uint8Array(this._boardBuffer),
     }
   }
-  
+
   private restoreFromSnapshot(snapshot: GameStateSnapshot): void {
     // Stop current timer
     clearTimeout(this._gameTimeoutId!)
     this._gameTimeoutId = null
-    
+
     // Clear scheduler
     this.scheduler.clear()
-    
+
     // Restore fields
     this._width = snapshot.width
     this._height = snapshot.height
@@ -654,19 +656,19 @@ class GameEngine {
     this.offsetY = snapshot.offsetY
     this._userDidFirstMove = snapshot.userDidFirstMove
     this._emptyTileIndex = snapshot.emptyTileIndex
-    
+
     // Restore board
     this._boardBuffer = snapshot.boardData.buffer.slice(
       snapshot.boardData.byteOffset,
       snapshot.boardData.byteOffset + snapshot.boardData.byteLength
     )
     this._uInt8Array = new Uint8Array(this._boardBuffer)
-    
+
     // Restart timer if playing
     if (this.gameStatus === 'PLAYING') {
       this.runGameLoopTimer()
     }
-    
+
     // Update view
     this.updateVisibleBoard()
   }
@@ -687,7 +689,7 @@ useEffect(() => {
   gameEngine.hasSave().then(setHasSaveFile)
 }, [gameEngine])
 
-const handleSaveGame = async () => {
+async function handleSaveGame() {
   const hasExisting = await gameEngine.hasSave()
   if (hasExisting) {
     setShowOverwriteDialog(true)
@@ -696,35 +698,39 @@ const handleSaveGame = async () => {
   await performSave()
 }
 
-const performSave = async () => {
+async function performSave() {
   try {
     await gameEngine.save()
     setHasSaveFile(true)
     setOpen(false)
     setShowOverwriteDialog(false)
-  } catch (error) {
+  }
+  catch (error) {
     setErrorMessage(getErrorMessage(error))
   }
 }
 
-const handleLoadGame = () => {
+function handleLoadGame() {
   if (gameStatus === 'PLAYING') {
     setShowLoadDialog(true)
-  } else {
+  }
+  else {
     performLoad()
   }
 }
 
-const performLoad = async () => {
+async function performLoad() {
   try {
     const loaded = await gameEngine.load()
     if (loaded) {
       setOpen(false)
       setShowLoadDialog(false)
-    } else {
+    }
+    else {
       setErrorMessage('No saved game found')
     }
-  } catch (error) {
+  }
+  catch (error) {
     setErrorMessage(getErrorMessage(error))
   }
 }
