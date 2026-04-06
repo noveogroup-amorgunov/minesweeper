@@ -42,6 +42,7 @@ const GlobalStyles = createGlobalStyle`
 `
 
 const gameEngine = new GameEngine({
+  mode: 'seeded',
   scheduler: supportNativeScheduler
     ? new SchedulerNavite()
     : new Scheduler(),
