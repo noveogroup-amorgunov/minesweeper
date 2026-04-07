@@ -100,7 +100,7 @@ FUTURE (y-webrtc):
  * Базовый интерфейс для всех операций
  */
 export interface BaseOperation {
-  /** Монотонный timestamp из Yjs */
+  /** Timestamp операции (Date.now()) */
   timestamp: number
   /** ID игрока, выполнившего операцию */
   playerId: string
@@ -190,6 +190,10 @@ export interface GameRoomConfig {
   scheduler: AbstractScheduler
 }
 
+/**
+ * GameState использует существующий интерфейс из GameEngine
+ * Без изменений для совместимости с существующим UI
+ */
 export interface GameState {
   visibleBoard: Array<{ value: number; index: number }>
   offsetX: number
@@ -203,6 +207,11 @@ export interface GameState {
   width: number
   gameTimeSeconds: number
 }
+
+/**
+ * Примечание: GameRoom.getGameState() проксирует вызов к GameEngine.getGameState()
+ * Интерфейс полностью совместим с существующей реализацией
+ */
 
 export class GameRoom {
   private gameEngine: GameEngine
@@ -310,6 +319,8 @@ export class GamePlayer {
 
 ### 2.4 CrdtManager
 
+**Выбранное решение:** Observer на Y.Array с фильтрацией по origin (см. requirements.md раздел 13.2)
+
 ```typescript
 // src/room/CrdtManager.ts
 
@@ -341,8 +352,8 @@ import type { GameOperation } from '../types/operations'
  */
 
 export interface CrdtManagerConfig {
-  /** Callback при добавлении новой операции (для синхронизации) */
-  onOperation?: (op: GameOperation) => void
+  /** Callback при получении внешних операций (от других клиентов) */
+  onExternalOperations?: (ops: GameOperation[]) => void
 }
 
 export class CrdtManager {
@@ -350,10 +361,36 @@ export class CrdtManager {
   private operations: Y.Array<Y.Map>
   private meta: Y.Map
   
-  constructor(config?: CrdtManagerConfig)
+  constructor(config?: CrdtManagerConfig) {
+    this.doc = new Y.Doc()
+    const root = this.doc.getMap()
+    this.operations = root.set('operations', new Y.Array())
+    this.meta = root.set('meta', new Y.Map())
+    
+    // Подписываемся на изменения массива операций
+    this.operations.observe((event, transaction) => {
+      // Фильтруем только внешние изменения (origin !== 'local')
+      if (transaction.origin !== 'local' && config?.onExternalOperations) {
+        const newOps: GameOperation[] = []
+        event.changes.added.forEach((item) => {
+          const content = item.content.getContent()
+          content.forEach((yMap: Y.Map) => {
+            newOps.push(yMapToOperation(yMap))
+          })
+        })
+        if (newOps.length > 0) {
+          config.onExternalOperations(newOps)
+        }
+      }
+    })
+  }
   
-  /** Добавить операцию в документ */
-  addOperation(op: GameOperation): void
+  /** 
+   * Добавить операцию в документ 
+   * @param op - операция для добавления
+   * @param origin - 'local' для локальных операций, undefined для внешних
+   */
+  addOperation(op: GameOperation, origin?: 'local'): void
   
   /** Получить все операции */
   getOperations(): GameOperation[]
@@ -413,7 +450,39 @@ export class EventBus {
 
 ## 3. Формат сохранения игры
 
-### 3.1 Бинарная схема файла
+### 3.1 Текущий формат (Версия 1)
+
+Текущий формат реализован в `GameSaveManager.ts`:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      Файл сохранения (Версия 1)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────┐                                                    │
+│  │   MAGIC HEADER      │  8 bytes - "MINESWP\0"                             │
+│  └─────────────────────┘                                                    │
+│  ┌─────────────────────┐                                                    │
+│  │   VERSION           │  1 byte - 0x01                                     │
+│  └─────────────────────┘                                                    │
+│  ┌─────────────────────┐                                                    │
+│  │   HEADER_LEN        │  4 bytes (uint32le)                                │
+│  └─────────────────────┘                                                    │
+│  ┌─────────────────────┐                                                    │
+│  │   JSON_HEADER       │  N bytes - GameStateSnapshot.header               │
+│  └─────────────────────┘                                                    │
+│  ┌─────────────────────┐                                                    │
+│  │   BOARD_DATA        │  M bytes - Uint8Array поля                        │
+│  └─────────────────────┘                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Версия 1 сохраняет полное состояние поля (boardData)** — не совместимо с CRDT подходом.
+
+---
+
+### 3.2 Новый формат (Версия 2)
+
+Новый формат для CRDT поддержки:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -466,25 +535,33 @@ export class EventBus {
 ### 3.2 TypeScript интерфейс сохранения
 
 ```typescript
-// src/engine/SaveManager.ts
+// src/engine/GameSaveManager.ts
 
 /**
- * Magic header для файлов сохранения
+ * Magic header для файлов сохранения версии 2
  * "MINESCRD" в ASCII = 0x4D494E4553435244
  */
-export const SAVE_MAGIC_HEADER = new Uint8Array([
+export const SAVE_MAGIC_HEADER_V2 = new Uint8Array([
   0x4D, 0x49, 0x4E, 0x45, 0x53, 0x43, 0x52, 0x44
 ]) // "MINESCRD"
 
 /**
- * Текущая версия формата сохранения
+ * Magic header для файлов сохранения версии 1 (устаревший)
+ * "MINESWP\0" в ASCII
  */
-export const SAVE_VERSION = 2
+export const SAVE_MAGIC_HEADER_V1 = new Uint8Array([
+  0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00
+]) // "MINESWP\0"
 
 /**
- * Метаданные сохранения (JSON)
+ * Текущая версия формата сохранения
  */
-export interface SaveMetadata {
+export const SAVE_VERSION_V2 = 2
+
+/**
+ * Метаданные сохранения версии 2 (JSON)
+ */
+export interface SaveMetadataV2 {
   /** Версия формата */
   version: number
   /** Ширина поля */
@@ -493,47 +570,48 @@ export interface SaveMetadata {
   height: number
   /** Количество мин */
   minesNum: number
-  /** Seed для генерации */
+  /** Seed для генерации (детерминированная генерация) */
   seed: string
-  /** ID комнаты */
+  /** ID комнаты (используется как seed) */
   roomId: string
   /** Время создания */
   createdAt: number
-  /** ID игрока */
+  /** ID игрока, создавшего сохранение */
   playerId: string
   /** Имя игрока */
   playerName: string
 }
 
 /**
- * Полная структура сохранения
+ * Полная структура сохранения версии 2
  */
-export interface SaveData {
-  metadata: SaveMetadata
-  /** Yjs state update (бинарные данные) */
+export interface SaveDataV2 {
+  metadata: SaveMetadataV2
+  /** Yjs state update (бинарные данные) - содержит все операции */
   yjsStateUpdate: Uint8Array
 }
 
-export class SaveManager {
+/**
+ * Расширение существующего GameSaveManager для поддержки версии 2
+ */
+export class GameSaveManager {
+  // ... существующие методы для версии 1 ...
+  
   /**
-   * Сериализовать данные в бинарный формат
+   * Сериализовать данные версии 2 в бинарный формат
    */
-  static serialize(data: SaveData): Uint8Array
+  static serializeV2(data: SaveDataV2): Uint8Array
 
   /**
-   * Десериализовать бинарные данные
+   * Десериализовать бинарные данные версии 2
+   * @throws SaveVersionError если версия не 2
    */
-  static deserialize(buffer: Uint8Array): SaveData
+  static deserializeV2(buffer: Uint8Array): SaveDataV2
 
   /**
-   * Сохранить игру в файл
+   * Проверить версию сохранения
    */
-  static save(data: SaveData, filename: string): Promise<void>
-
-  /**
-   * Загрузить игру из файла
-   */
-  static load(filename: string): Promise<SaveData>
+  static detectVersion(buffer: Uint8Array): 1 | 2 | 'unknown'
 }
 ```
 
@@ -761,20 +839,22 @@ export class GameRoom {
     this.scheduler = scheduler
     this.currentPlayer = new GamePlayer({ name: playerName })
     
-    // Создаём CrdtManager
+    // Создаём CrdtManager с подпиской на внешние операции
     this.crdtManager = new CrdtManager({
-      onOperation: (op) => {
-        // Callback вызывается при добавлении операции в документ
-        // Синхронизация происходит автоматически через Yjs
+      onExternalOperations: (ops) => {
+        // Применяем операции от других клиентов
+        this.handleExternalOperations(ops)
       }
     })
     
     // Создаём GameEngine с дефолтными параметрами
-    // Параметры будут установлены при createGame/joinGame
+    // GameRoom всегда использует mode: 'seeded' для детерминированной генерации
+    // Параметры игры будут установлены при createGame/joinGame
+    const engineRoomId = roomId ?? generateRoomId()
     this.gameEngine = new GameEngine({
       scheduler: this.scheduler,
       mode: 'seeded',
-      roomId: roomId ?? generateRoomId(),
+      roomId: engineRoomId,
     })
     
     // Подключаем синхронизацию если есть roomId
@@ -800,7 +880,8 @@ export class GameRoom {
     // Генерируем roomId если не передан
     this.roomId = this.roomId ?? generateRoomId()
     
-    // Генерируем seed на основе roomId
+    // Seed генерируется на основе roomId
+    // GameEngine использует roomId как seed для детерминированной генерации
     const seed = this.roomId
     
     // Добавляем операцию join в CRDT
@@ -815,9 +896,11 @@ export class GameRoom {
       timestamp: Date.now(),
     }
     
-    this.crdtManager.addOperation(joinOp)
+    // Добавляем операцию с origin: 'local' (не вызовет callback внешних операций)
+    this.crdtManager.addOperation(joinOp, 'local')
     
     // Перезапускаем GameEngine с новыми параметрами
+    // GameEngine использует seed (roomId) для генерации поля
     this.gameEngine.restart({
       width: params.width,
       height: params.height,
@@ -897,10 +980,11 @@ export class GameRoom {
       timestamp: Date.now(),
     }
     
-    // Добавляем в CRDT (синхронизируется автоматически)
-    this.crdtManager.addOperation(op)
+    // Добавляем в CRDT с origin: 'local'
+    // Синхронизация происходит автоматически через SyncProvider
+    this.crdtManager.addOperation(op, 'local')
     
-    // Применяем к GameEngine
+    // Применяем к GameEngine локально
     this.applyOperation(op)
   }
 
@@ -917,10 +1001,10 @@ export class GameRoom {
       timestamp: Date.now(),
     }
     
-    // Добавляем в CRDT (синхронизируется автоматически)
-    this.crdtManager.addOperation(op)
+    // Добавляем в CRDT с origin: 'local'
+    this.crdtManager.addOperation(op, 'local')
     
-    // Применяем к GameEngine
+    // Применяем к GameEngine локально
     this.applyOperation(op)
   }
 
@@ -939,11 +1023,12 @@ export class GameRoom {
       const index = op.y * this.gameEngine.getGameState().width + op.x
       
       // Если клетка уже открыта — игнорируем любую операцию
-      // if (this.gameEngine.isRevealed(index)) return
+      // Детали реализации: проверка через GameEngine._uInt8Array
       
       // LeftClick имеет приоритет над RightClick
       if (op.type === 'rightClick') {
-        // if (this.gameEngine.isRevealed(index)) return
+        // Если ячейка уже открыта — нельзя поставить флаг
+        // Реализация зависит от внутренней структуры GameEngine
       }
     }
     
@@ -954,6 +1039,14 @@ export class GameRoom {
     
     // Помечаем операцию как обработанную
     this.processedOps.add(key)
+  }
+
+  /**
+   * Обработать внешние операции (от других клиентов)
+   * Вызывается из CrdtManager.onExternalOperations
+   */
+  private handleExternalOperations(ops: GameOperation[]): void {
+    ops.forEach(op => this.applyOperation(op))
   }
 
   /**
@@ -1306,7 +1399,13 @@ describe('GameRoom CRDT Synchronization', () => {
 13. Добавить тесты для `applyOperation()`
 
 ### Phase 5: Сохранение/загрузка
-14. Обновить `SaveManager` для формата версии 2
+14. Обновить `GameSaveManager` для поддержки формата версии 2
+    - Добавить `serializeV2()` и `deserializeV2()`
+    - Добавить `detectVersion()` для определения версии файла
+    - При загрузке файла версии 1 — выбрасывать `SaveVersionError`
+15. Интеграция сохранения в GameRoom
+    - Метод `GameRoom.save(filename)`
+    - Статический метод `GameRoom.load(filename, config)`
 15. Добавить метод `load()` в GameRoom
 16. Тесты сохранения/загрузки
 
