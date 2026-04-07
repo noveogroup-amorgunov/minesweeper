@@ -12,13 +12,20 @@ src/
 │   └── Scheduler.ts                   # EXISTING
 │
 ├── engine/
-│   ├── GameEngine.ts                  # MODIFIED: Интеграция с Yjs, CRDT операции
-│   ├── GameEngine.spec.ts             # MODIFIED: Добавить тесты синхронизации
-│   ├── GamePlayer.ts                  # NEW: Класс игрока (id, name)
+│   ├── GameEngine.ts                  # MODIFIED: Добавить applyOperation()
+│   ├── GameEngine.spec.ts             # EXISTING
 │   ├── GameWebWorker.ts               # EXISTING
-│   ├── CrdtManager.ts                 # NEW: Обёртка над Yjs документом
 │   ├── generateMines.ts               # EXISTING
 │   └── SaveManager.ts                 # MODIFIED: Новый формат сохранения
+│
+├── room/                              # NEW FOLDER
+│   ├── GameRoom.ts                    # NEW: Центральная абстракция
+│   ├── GameRoom.spec.ts               # NEW: Тесты GameRoom
+│   ├── GamePlayer.ts                  # NEW: Класс игрока
+│   ├── CrdtManager.ts                 # NEW: Обёртка над Yjs документом
+│   ├── CrdtManager.spec.ts            # NEW: Тесты CrdtManager
+│   ├── SyncProvider.ts                # NEW: Интерфейс провайдера
+│   └── LocalSyncProvider.ts           # NEW: Локальный провайдер для тестов
 │
 ├── types/
 │   └── operations.ts                  # NEW: TypeScript интерфейсы операций
@@ -26,54 +33,46 @@ src/
 ├── utils/
 │   └── generateRandomId.ts            # EXISTING
 │
-└── view/
-    └── ...                            # EXISTING (UI без изменений)
+└── view/                              # EXISTING (UI адаптируется под GameRoom)
 ```
 
 ### 1.2 Диаграмма взаимодействия компонентов
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              GameEngine                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
-│  │   Board      │  │ CrdtManager  │  │ SaveManager  │  │  GamePlayer  │    │
-│  │  (Uint8Array)│  │   (Y.Doc)    │  │              │  │  (id, name)  │    │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────────────┘    │
-│         │                 │                 │                               │
-│         │ apply()         │ addOperation()  │ save()                        │
-│         │                 │                 │                               │
-│         ▼                 ▼                 ▼                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                        Yjs Document                                  │   │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │   │
-│  │  │  Y.Array<Operation> operations                               │  │   │
-│  │  │  └── [{type: 'leftClick', x: 5, y: 10, playerId, timestamp}, │  │   │
-│  │  │      {type: 'rightClick', x: 3, y: 7, playerId, timestamp},  │  │   │
-│  │  │      ...]                                                    │  │   │
-│  │  └──────────────────────────────────────────────────────────────┘  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              GameRoom (Единая точка входа)                   │
+│                                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │  GamePlayer  │  │ CrdtManager  │  │   GameEngine │  │SyncProvider  │     │
+│  │ (current     │  │   (Y.Doc)    │  │  (логика игры)│  │(WebRTC/local)│    │
+│  │  player)     │  │              │  │              │  │              │     │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
+│         │                 │                 │                 │              │
+│         │ get playerId    │ addOperation()  │ applyOperation()│ sync         │
+│         │                 │ getOperations() │ getGameState()  │              │
+│         │                 │                 │ restart()       │              │
+│         ▼                 ▼                 ▼                 ▼              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                        Yjs Document                                  │    │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │    │
+│  │  │  Y.Array<Operation> operations                               │  │    │
+│  │  │  └── [{type: 'join', roomId, width, height, ...},           │  │    │
+│  │  │      {type: 'leftClick', x: 5, y: 10, playerId, timestamp}, │  │    │
+│  │  │      {type: 'rightClick', x: 3, y: 7, playerId, timestamp}, │  │    │
+│  │  │      ...]                                                    │  │    │
+│  │  └──────────────────────────────────────────────────────────────┘  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       │ sync
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        LocalSyncProvider (тестовый)                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  EventBus                                                           │   │
-│  │  ├── emit('operation', op)                                          │   │
-│  │  ├── on('operation', callback)                                      │   │
-│  │  └── pause/resume для имитации offline                              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                    ┌──────────────────┴──────────────────┐
-                    │                                     │
-                    ▼                                     ▼
+                                        │
+                     ┌──────────────────┴──────────────────┐
+                     │                                     │
+                     ▼                                     ▼
 ┌──────────────────────────────┐          ┌──────────────────────────────┐
-│      GameEngine (Client 1)   │          │      GameEngine (Client 2)   │
+│      GameRoom (Client 1)     │          │      GameRoom (Client 2)     │
 │  ┌────────────────────────┐  │          │  ┌────────────────────────┐  │
 │  │  Y.Doc (operations)    │  │◄────────►│  │  Y.Doc (operations)    │  │
-│  │  - leftClick(x,y)      │  │  merge   │  │  - leftClick(x,y)      │  │
+│  │  - join(roomId, seed)  │  │  merge   │  │  - join(roomId, seed)  │  │
+│  │  - leftClick(x,y)      │  │          │  │  - leftClick(x,y)      │  │
 │  │  - rightClick(x,y)     │  │          │  │  - rightClick(x,y)     │  │
 │  └────────────────────────┘  │          │  └────────────────────────┘  │
 └──────────────────────────────┘          └──────────────────────────────┘
@@ -87,7 +86,6 @@ FUTURE (y-webrtc):
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
-
 
 ---
 
@@ -163,10 +161,157 @@ export type GameOperation =
 export type OperationType = GameOperation['type']
 ```
 
-### 2.2 Структура Yjs документа
+### 2.2 Класс GameRoom
 
 ```typescript
-// src/engine/CrdtManager.ts
+// src/room/GameRoom.ts
+
+import type { AbstractScheduler } from '../core/AbstractScheduler'
+import type { GameEngine } from '../engine/GameEngine'
+import type { CrdtManager } from './CrdtManager'
+import type { GamePlayer } from './GamePlayer'
+import type { SyncProvider, SyncProviderFactory } from './SyncProvider'
+import type { GameOperation, LeftClickOperation, RightClickOperation } from '../types/operations'
+
+export interface GameRoomConfig {
+  /** ID комнаты (опционально — генерируется автоматически при создании игры) */
+  roomId?: string
+  /** Имя игрока (опционально) */
+  playerName?: string
+  /** Начальные параметры игры (для создания новой игры) */
+  gameParams?: {
+    width: number
+    height: number
+    minesNum: number
+  }
+  /** Фабрика для создания провайдера синхронизации */
+  syncProviderFactory?: SyncProviderFactory
+  /** Scheduler для задач */
+  scheduler: AbstractScheduler
+}
+
+export interface GameState {
+  visibleBoard: Array<{ value: number; index: number }>
+  offsetX: number
+  offsetY: number
+  gameStatus: 'READY' | 'PENDING' | 'PLAYING' | 'DEAD' | 'WIN'
+  minesLeft: number
+  minesNum: number
+  tilesLeft: number
+  boardByteLength: number
+  height: number
+  width: number
+  gameTimeSeconds: number
+}
+
+export class GameRoom {
+  private gameEngine: GameEngine
+  private crdtManager: CrdtManager
+  private currentPlayer: GamePlayer
+  private syncProvider: SyncProvider | null = null
+  private scheduler: AbstractScheduler
+  private roomId: string | null = null
+  private processedOps: Set<string> = new Set()
+
+  constructor(config: GameRoomConfig)
+
+  /**
+   * Создать новую игру
+   * Генерирует roomId, добавляет операцию join, инициализирует GameEngine
+   */
+  async createGame(params: { width: number; height: number; minesNum: number }): Promise<void>
+
+  /**
+   * Присоединиться к существующей игре
+   * Получает параметры из первой join операции, перезапускает GameEngine,
+   * применяет все предыдущие операции
+   */
+  async joinGame(roomId: string): Promise<void>
+
+  /**
+   * Левый клик по ячейке (вызывается из UI)
+   * Добавляет операцию в CRDT и применяет к GameEngine
+   */
+  handleLeftClick(x: number, y: number): void
+
+  /**
+   * Правый клик по ячейке (вызывается из UI)
+   * Добавляет операцию в CRDT и применяет к GameEngine
+   */
+  handleRightClick(x: number, y: number): void
+
+  /**
+   * Получить текущее состояние игры из GameEngine
+   */
+  getGameState(): GameState
+
+  /**
+   * Подписаться на изменения состояния игры
+   */
+  subscribe(callback: (state: GameState) => void): () => void
+
+  /**
+   * Получить ID текущего игрока
+   */
+  getCurrentPlayerId(): string
+
+  /**
+   * Получить ID комнаты
+   */
+  getRoomId(): string | null
+
+  /**
+   * Перезапустить игру (только для single-player)
+   */
+  restart(): void
+
+  /**
+   * Обработать операцию извне (от других клиентов)
+   * Вызывается при получении операции через SyncProvider
+   */
+  private handleExternalOperation(op: GameOperation): void
+
+  /**
+   * Применить операцию к GameEngine с дедупликацией
+   */
+  private applyOperation(op: GameOperation): void
+
+  /**
+   * Генерация ключа для дедупликации
+   */
+  private getOpKey(op: GameOperation): string
+}
+```
+
+### 2.3 Класс GamePlayer
+
+```typescript
+// src/room/GamePlayer.ts
+
+import { generateRandomId } from '../utils/generateRandomId'
+
+export interface GamePlayerConfig {
+  name?: string
+}
+
+export class GamePlayer {
+  /** Уникальный ID игрока (8 символов, base62) */
+  readonly id: string
+  
+  /** Отображаемое имя игрока */
+  readonly name: string
+
+  constructor(config?: GamePlayerConfig) {
+    this.id = generateRandomId(8)
+    this.name = config?.name ?? `Player ${this.id.slice(0, 4)}`
+  }
+}
+```
+
+### 2.4 CrdtManager
+
+```typescript
+// src/room/CrdtManager.ts
 
 import * as Y from 'yjs'
 import type { GameOperation } from '../types/operations'
@@ -196,9 +341,7 @@ import type { GameOperation } from '../types/operations'
  */
 
 export interface CrdtManagerConfig {
-  /** ID комнаты для синхронизации */
-  roomId: string
-  /** Callback при добавлении новой операции */
+  /** Callback при добавлении новой операции (для синхронизации) */
   onOperation?: (op: GameOperation) => void
 }
 
@@ -206,9 +349,8 @@ export class CrdtManager {
   private doc: Y.Doc
   private operations: Y.Array<Y.Map>
   private meta: Y.Map
-  private processedOps: Set<string> // Для дедупликации
   
-  constructor(config: CrdtManagerConfig)
+  constructor(config?: CrdtManagerConfig)
   
   /** Добавить операцию в документ */
   addOperation(op: GameOperation): void
@@ -233,32 +375,7 @@ export class CrdtManager {
 }
 ```
 
-### 2.3 Класс GamePlayer
-
-```typescript
-// src/engine/GamePlayer.ts
-
-import { generateRandomId } from '../utils/generateRandomId'
-
-export interface GamePlayerConfig {
-  name?: string
-}
-
-export class GamePlayer {
-  /** Уникальный ID игрока (8 символов, base62) */
-  readonly id: string
-  
-  /** Отображаемое имя игрока */
-  readonly name: string
-
-  constructor(config?: GamePlayerConfig) {
-    this.id = generateRandomId(8)
-    this.name = config?.name ?? `Player ${this.id.slice(0, 4)}`
-  }
-}
-```
-
-### 2.4 EventBus
+### 2.5 EventBus
 
 ```typescript
 // src/core/eventBus.ts
@@ -291,7 +408,6 @@ export class EventBus {
   clearQueue(): void
 }
 ```
-
 
 ---
 
@@ -421,64 +537,13 @@ export class SaveManager {
 }
 ```
 
-### 3.3 Пример кода сериализации
+### 3.3 Процесс загрузки игры
 
-```typescript
-// Псевдокод сериализации
-function serializeSave(data: SaveData): Uint8Array {
-  const jsonBytes = new TextEncoder().encode(JSON.stringify(data.metadata))
-  const yjsBytes = data.yjsStateUpdate
-  
-  const totalSize = 
-    8 +                    // MAGIC
-    2 +                    // VERSION
-    4 +                    // JSON_LEN
-    jsonBytes.length +     // JSON
-    4 +                    // YJS_LEN
-    yjsBytes.length        // YJS_STATE
-    // + 4 для CHECKSUM (опционально)
-  
-  const buffer = new ArrayBuffer(totalSize)
-  const view = new DataView(buffer)
-  const bytes = new Uint8Array(buffer)
-  
-  let offset = 0
-  
-  // Magic header
-  bytes.set(SAVE_MAGIC_HEADER, offset)
-  offset += 8
-  
-  // Version (uint16le)
-  view.setUint16(offset, SAVE_VERSION, true)
-  offset += 2
-  
-  // JSON length (uint32le)
-  view.setUint32(offset, jsonBytes.length, true)
-  offset += 4
-  
-  // JSON data
-  bytes.set(jsonBytes, offset)
-  offset += jsonBytes.length
-  
-  // Yjs update length (uint32le)
-  view.setUint32(offset, yjsBytes.length, true)
-  offset += 4
-  
-  // Yjs state update
-  bytes.set(yjsBytes, offset)
-  offset += yjsBytes.length
-  
-  return bytes
-}
-```
-
-### 3.4 Процесс загрузки игры
-
-При загрузке сохраненной игры выполняется тот же алгоритм, что и при присоединении к существующей игре:
+При загрузке сохраненной игры GameRoom выполняет тот же алгоритм, что и при присоединении к существующей игре:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Процесс загрузки игры (Load Game)                         │
+│                    Процесс загрузки игры (GameRoom.load)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  1. Чтение файла .mine                                                      │
@@ -488,18 +553,17 @@ function serializeSave(data: SaveData): Uint8Array {
 │     └── CrdtManager.applyStateUpdate(yjsStateUpdate)                        │
 │     └── Восстанавливаем все операции в Y.Doc                                │
 │                                                                             │
-│  3. Поиск операции create                                                   │
-│     └── Находим первую операцию type: 'create' в массиве                    │
+│  3. Поиск операции join                                                     │
+│     └── Находим первую операцию type: 'join' в массиве                      │
 │     └── Извлекаем: width, height, minesNum, seed, roomId                    │
 │                                                                             │
-│  4. Перезапуск игры (restartGame)                                           │
-│     └── Очищаем текущее состояние (reset)                                   │
-│     └── Устанавливаем параметры из create операции                          │
+│  4. Перезапуск игры (GameEngine.restart)                                    │
+│     └── Устанавливаем параметры из join операции                            │
 │     └── Генерируем поле с тем же seed (детерминированно)                    │
 │                                                                             │
 │  5. Применение игровых операций                                             │
-│     └── Проходим по всем операциям (кроме create)                           │
-│     └── Применяем leftClick/rightClick через handleOperation                │
+│     └── Проходим по всем операциям (кроме join)                             │
+│     └── Применяем leftClick/rightClick через GameEngine.applyOperation()    │
 │     └── Восстанавливаем состояние игры                                      │
 │                                                                             │
 │  6. Игра загружена и готова к продолжению                                   │
@@ -509,45 +573,11 @@ function serializeSave(data: SaveData): Uint8Array {
 
 **Ключевые моменты:**
 
-1. **Параметры из первой `join` операции**: Как и при `joinGame`, все параметры игры (width, height, minesNum, seed) берутся из первой операции `join`, а не из JSON metadata. JSON metadata используется только для быстрой проверки и совместимости.
+1. **Параметры из первой `join` операции:** Как и при `joinGame`, все параметры игры (width, height, minesNum, seed) берутся из первой операции `join`, а не из JSON metadata. JSON metadata используется только для быстрой проверки и совместимости.
 
-2. **Детерминированное восстановление**: Тот же `seed` гарантирует идентичное поле на всех клиентах.
+2. **Детерминированное восстановление:** Тот же `seed` гарантирует идентичное поле на всех клиентах.
 
-3. **Последовательность операций**: Важно сначала сделать `restartGame`, затем применять операции в порядке их следования в Yjs массиве.
-
-```typescript
-// Пример кода загрузки в GameEngine
-async load(saveData: SaveData): Promise<void> {
-  // 1. Применяем Yjs state update
-  this.crdtManager.applyStateUpdate(saveData.yjsStateUpdate)
-  
-  // 2. Получаем все операции
-  const operations = this.crdtManager.getOperations()
-  
-  // 3. Находим первую join операцию
-  const joinOp = operations.find(op => op.type === 'join') as JoinGameOperation | undefined
-  
-  if (!joinOp) {
-    throw new Error('Invalid save file: no join operation found')
-  }
-  
-  // 4. Перезапускаем игру с параметрами из первой join
-  this.restartGame({
-    width: joinOp.width,
-    height: joinOp.height,
-    minesNum: joinOp.minesNum,
-    seed: joinOp.seed,
-    roomId: joinOp.roomId
-  })
-  
-  // 5. Применяем все игровые операции (кроме join)
-  for (const op of operations) {
-    if (op.type === 'leftClick' || op.type === 'rightClick') {
-      this.handleOperation(op)
-    }
-  }
-}
-```
+3. **Последовательность операций:** Важно сначала сделать `restart`, затем применять операции в порядке их следования в Yjs массиве.
 
 ---
 
@@ -556,7 +586,7 @@ async load(saveData: SaveData): Promise<void> {
 ### 4.1 Абстрактный провайдер синхронизации
 
 ```typescript
-// src/engine/SyncProvider.ts
+// src/room/SyncProvider.ts
 
 import type * as Y from 'yjs'
 
@@ -567,7 +597,7 @@ import type * as Y from 'yjs'
  * @see https://github.com/yjs/y-webrtc
  * 
  * В будущем можно заменить LocalSyncProvider на WebrtcProvider
- * без изменений в GameEngine.
+ * без изменений в GameRoom.
  */
 export interface SyncProvider {
   /** Уникальный ID комнаты/документа */
@@ -605,7 +635,7 @@ export type SyncProviderFactory = (
 ### 4.2 Локальный провайдер (для тестирования)
 
 ```typescript
-// src/engine/LocalSyncProvider.ts
+// src/room/LocalSyncProvider.ts
 
 import * as Y from 'yjs'
 import { EventBus } from '../core/eventBus'
@@ -707,227 +737,265 @@ export class LocalSyncProvider implements SyncProvider {
 }
 ```
 
-### 4.3 Интеграция в GameEngine
+### 4.3 Интеграция в GameRoom
 
 ```typescript
-// src/engine/GameEngine.ts (изменения)
+// src/room/GameRoom.ts (фрагмент реализации)
 
-import * as Y from 'yjs'
-import { CrdtManager } from './CrdtManager'
-import { GamePlayer } from './GamePlayer'
-import { LocalSyncProvider } from './LocalSyncProvider'
-import type { SyncProvider, SyncProviderFactory } from './SyncProvider'
-import type { GameOperation } from '../types/operations'
-
-export interface GameEngineConfig {
-  width: number
-  height: number
-  minesNum: number
-  mode: 'random' | 'seeded'
-  roomId?: string
-  player?: GamePlayer
-  /** Фабрика для создания провайдера синхронизации */
-  syncProviderFactory?: SyncProviderFactory
-}
-
-export class GameEngine {
-  private board: Uint8Array
+export class GameRoom {
+  private gameEngine: GameEngine
   private crdtManager: CrdtManager
-  private player: GamePlayer
+  private currentPlayer: GamePlayer
   private syncProvider: SyncProvider | null = null
-  private seed: string
-  
-  constructor(config: GameEngineConfig) {
-    // ... инициализация поля ...
+  private scheduler: AbstractScheduler
+  private roomId: string | null = null
+  private processedOps: Set<string> = new Set()
+
+  constructor({
+    roomId,
+    playerName,
+    gameParams,
+    syncProviderFactory,
+    scheduler,
+  }: GameRoomConfig) {
+    this.scheduler = scheduler
+    this.currentPlayer = new GamePlayer({ name: playerName })
     
-    // Создаём или используем переданного игрока
-    this.player = config.player ?? new GamePlayer()
-    
-    // Создаём CRDT менеджер
+    // Создаём CrdtManager
     this.crdtManager = new CrdtManager({
-      roomId: config.roomId ?? generateRoomId(),
-      onOperation: (op) => this.handleOperation(op)
+      onOperation: (op) => {
+        // Callback вызывается при добавлении операции в документ
+        // Синхронизация происходит автоматически через Yjs
+      }
+    })
+    
+    // Создаём GameEngine с дефолтными параметрами
+    // Параметры будут установлены при createGame/joinGame
+    this.gameEngine = new GameEngine({
+      scheduler: this.scheduler,
+      mode: 'seeded',
+      roomId: roomId ?? generateRoomId(),
     })
     
     // Подключаем синхронизацию если есть roomId
-    if (config.roomId) {
-      const factory = config.syncProviderFactory ?? 
-        ((roomId, doc) => new LocalSyncProvider(roomId, doc))
-      
-      this.syncProvider = factory(
-        config.roomId,
+    if (roomId && syncProviderFactory) {
+      this.syncProvider = syncProviderFactory(
+        roomId,
         this.crdtManager.getDoc()
       )
+      
+      // Подписываемся на синхронизацию
+      this.syncProvider.onSync = (update, origin) => {
+        // При получении обновления от других клиентов
+        // Применяем новые операции
+        this.applyPendingOperations()
+      }
+    }
+  }
+
+  /**
+   * Создать новую игру
+   */
+  async createGame(params: { width: number; height: number; minesNum: number }): Promise<void> {
+    // Генерируем roomId если не передан
+    this.roomId = this.roomId ?? generateRoomId()
+    
+    // Генерируем seed на основе roomId
+    const seed = this.roomId
+    
+    // Добавляем операцию join в CRDT
+    const joinOp: JoinGameOperation = {
+      type: 'join',
+      roomId: this.roomId,
+      playerId: this.currentPlayer.id,
+      width: params.width,
+      height: params.height,
+      minesNum: params.minesNum,
+      seed,
+      timestamp: Date.now(),
     }
     
-    // Добавляем начальную операцию присоединения (создания игры)
-    this.crdtManager.addOperation({
-      type: 'join',
-      roomId: this.crdtManager.getRoomId(),
-      playerId: this.player.id,
-      width: config.width,
-      height: config.height,
-      minesNum: config.minesNum,
-      seed: this.seed,
-      timestamp: Date.now()
+    this.crdtManager.addOperation(joinOp)
+    
+    // Перезапускаем GameEngine с новыми параметрами
+    this.gameEngine.restart({
+      width: params.width,
+      height: params.height,
+      minesNum: params.minesNum,
     })
   }
 
   /**
-   * Обработка входящей операции (от других клиентов)
-   */
-  private handleOperation(op: GameOperation): void {
-    switch (op.type) {
-      case 'leftClick':
-        // Применяем операцию от другого клиента
-        // Существующий метод reveal уже содержит логику открытия
-        // и рекурсивного открытия соседей (flood fill)
-        this.reveal(op.x, op.y, false)
-        break
-      case 'rightClick':
-        // Применяем операцию от другого клиента
-        // Существующий метод flag переключает состояние флага
-        this.flag(op.x, op.y, false)
-        break
-      case 'join':
-        // Игнорируем join — используем только для инициализации/присоединения
-        // Параметры игры получаются из первой join операции
-        break
-    }
-  }
-
-  /**
-   * Присоединение к существующей игре
-   * Вызывается когда игрок хочет присоединиться к комнате
+   * Присоединиться к существующей игре
    */
   async joinGame(roomId: string): Promise<void> {
-    // 1. Устанавливаем статус ожидания
-    this.gameStatus = 'PENDING'
+    this.roomId = roomId
     
-    // 2. Подключаемся к существующему Yjs документу (async)
-    await this.connectToRoom(roomId)
+    // Устанавливаем статус ожидания
+    // this.gameEngine.setGameStatus('PENDING') // Если нужен такой метод
     
-    // 3. Получаем все операции
+    // Подключаемся к существующему Yjs документу через SyncProvider
+    if (this.syncProvider) {
+      this.syncProvider.destroy()
+    }
+    
+    // В реальном сценарии здесь был бы async код подключения
+    // Для LocalSyncProvider подключение мгновенное
+    
+    // Получаем все операции
     const operations = this.crdtManager.getOperations()
     
-    // 4. Находим первую операцию join
+    // Находим первую операцию join
     const firstJoinOp = operations.find(op => op.type === 'join') as JoinGameOperation | undefined
     
     if (!firstJoinOp) {
       throw new Error('Game not found: no join operation in document')
     }
     
-    // 5. Очищаем Yjs документ и перезапускаем игру с параметрами из первой join
-    this.crdtManager.clear()
-    this.restartGame({
+    // Перезапускаем GameEngine с параметрами из первой join
+    this.gameEngine.restart({
       width: firstJoinOp.width,
       height: firstJoinOp.height,
       minesNum: firstJoinOp.minesNum,
-      seed: firstJoinOp.seed,
-      roomId: firstJoinOp.roomId
     })
     
-    // 6. Добавляем свою операцию join
-    this.crdtManager.addOperation({
+    // Добавляем свою операцию join
+    const myJoinOp: JoinGameOperation = {
       type: 'join',
       roomId: firstJoinOp.roomId,
-      playerId: this.player.id,
+      playerId: this.currentPlayer.id,
       width: firstJoinOp.width,
       height: firstJoinOp.height,
       minesNum: firstJoinOp.minesNum,
       seed: firstJoinOp.seed,
-      timestamp: Date.now()
-    })
+      timestamp: Date.now(),
+    }
     
-    // 7. Применяем все предыдущие операции (кроме join)
+    this.crdtManager.addOperation(myJoinOp)
+    
+    // Применяем все предыдущие операции (кроме join)
     for (const op of operations) {
       if (op.type === 'leftClick' || op.type === 'rightClick') {
-        this.handleOperation(op)
+        this.applyOperation(op)
       }
     }
     
-    // 8. Игра готова
-    this.gameStatus = 'PLAYING'
+    // Игра готова
+    // this.gameEngine.setGameStatus('PLAYING')
   }
 
   /**
-   * Перезапуск игры с новыми параметрами
-   * Используется при присоединении к существующей игре
+   * Левый клик по ячейке (вызывается из UI)
    */
-  private restartGame(params: {
-    width: number
-    height: number
-    minesNum: number
-    seed: string
-    roomId: string
-  }): void {
-    // Очищаем текущее состояние
-    this.reset()
+  handleLeftClick(x: number, y: number): void {
+    // Создаём операцию
+    const op: LeftClickOperation = {
+      type: 'leftClick',
+      x,
+      y,
+      playerId: this.currentPlayer.id,
+      timestamp: Date.now(),
+    }
     
-    // Устанавливаем новые параметры
-    this.width = params.width
-    this.height = params.height
-    this.minesNum = params.minesNum
-    this.seed = params.seed
-    this.roomId = params.roomId
+    // Добавляем в CRDT (синхронизируется автоматически)
+    this.crdtManager.addOperation(op)
     
-    // Генерируем поле с тем же seed (детерминированно)
-    this.generateBoard()
+    // Применяем к GameEngine
+    this.applyOperation(op)
   }
 
   /**
-   * Переопределяем существующий метод reveal
-   * Добавляем генерацию CRDT операции при локальном клике
+   * Правый клик по ячейке (вызывается из UI)
    */
-  reveal(x: number, y: number, isLocal: boolean = true): void {
-    // Проверка на дубликат при применении внешней операции
-    if (!isLocal && this.isRevealed(x, y)) {
+  handleRightClick(x: number, y: number): void {
+    // Создаём операцию
+    const op: RightClickOperation = {
+      type: 'rightClick',
+      x,
+      y,
+      playerId: this.currentPlayer.id,
+      timestamp: Date.now(),
+    }
+    
+    // Добавляем в CRDT (синхронизируется автоматически)
+    this.crdtManager.addOperation(op)
+    
+    // Применяем к GameEngine
+    this.applyOperation(op)
+  }
+
+  /**
+   * Применить операцию к GameEngine с дедупликацией
+   */
+  private applyOperation(op: GameOperation): void {
+    // Дедупликация: проверяем, была ли операция уже применена
+    const key = this.getOpKey(op)
+    if (this.processedOps.has(key)) {
       return // Пропускаем дубликат
     }
     
-    // Если локальный клик — сохраняем операцию в CRDT
-    if (isLocal) {
-      this.crdtManager.addOperation({
-        type: 'leftClick',
-        x,
-        y,
-        playerId: this.player.id,
-        timestamp: Date.now()
-      })
+    // Правила разрешения конфликтов
+    if (op.type === 'leftClick' || op.type === 'rightClick') {
+      const index = op.y * this.gameEngine.getGameState().width + op.x
+      
+      // Если клетка уже открыта — игнорируем любую операцию
+      // if (this.gameEngine.isRevealed(index)) return
+      
+      // LeftClick имеет приоритет над RightClick
+      if (op.type === 'rightClick') {
+        // if (this.gameEngine.isRevealed(index)) return
+      }
     }
     
-    // Вызываем существующую логику открытия ячейки
-    // Она уже включает flood fill для пустых ячеек
-    super.reveal(x, y)
+    // Применяем операцию через GameEngine
+    if (op.type === 'leftClick' || op.type === 'rightClick') {
+      this.gameEngine.applyOperation(op)
+    }
+    
+    // Помечаем операцию как обработанную
+    this.processedOps.add(key)
   }
 
   /**
-   * Переопределяем существующий метод flag
-   * Добавляем генерацию CRDT операции при локальном клике
+   * Генерация ключа для дедупликации
+   * Две операции считаются дубликатами если: тип и координаты совпадают
    */
-  flag(x: number, y: number, isLocal: boolean = true): void {
-    // Проверка: если ячейка уже открыта — не ставим флаг
-    // (открытие имеет приоритет над флагом)
-    if (this.isRevealed(x, y)) {
-      return
+  private getOpKey(op: GameOperation): string {
+    if (op.type === 'join') {
+      return `join-${op.playerId}-${op.timestamp}`
     }
-    
-    // Если локальный клик — сохраняем операцию в CRDT
-    if (isLocal) {
-      this.crdtManager.addOperation({
-        type: 'rightClick',
-        x,
-        y,
-        playerId: this.player.id,
-        timestamp: Date.now()
-      })
-    }
-    
-    // Вызываем существующую логику переключения флага
-    super.flag(x, y)
+    return `${op.type}-${op.x}-${op.y}`
   }
-```
 
+  /**
+   * Получить текущее состояние игры
+   */
+  getGameState(): GameState {
+    return this.gameEngine.getGameState()
+  }
+
+  /**
+   * Подписаться на изменения состояния игры
+   */
+  subscribe(callback: (state: GameState) => void): () => void {
+    return this.gameEngine.subscribe(callback)
+  }
+
+  /**
+   * Получить ID текущего игрока
+   */
+  getCurrentPlayerId(): string {
+    return this.currentPlayer.id
+  }
+
+  /**
+   * Получить ID комнаты
+   */
+  getRoomId(): string | null {
+    return this.roomId
+  }
+}
+```
 
 ### 4.4 Совместимость с y-webrtc
 
@@ -935,16 +1003,16 @@ export class GameEngine {
 
 ```typescript
 // BEFORE (локальное тестирование)
-const engine = new GameEngine({
-  roomId: 'abc123',
+const room = new GameRoom({
+  scheduler: new Scheduler(),
   // Используется LocalSyncProvider по умолчанию
 })
 
 // AFTER (WebRTC синхронизация)
 import { WebrtcProvider } from 'y-webrtc'
 
-const engine = new GameEngine({
-  roomId: 'abc123',
+const room = new GameRoom({
+  scheduler: new Scheduler(),
   syncProviderFactory: (roomId, doc) => {
     return new WebrtcProvider(roomId, doc, {
       signaling: ['wss://signaling-server.example.com']
@@ -961,140 +1029,69 @@ const engine = new GameEngine({
 
 ---
 
-## 5. Процесс присоединения к игре (Join Game)
+## 5. Изменения в GameEngine
 
-### 5.1 Алгоритм присоединения
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Процесс присоединения к игре                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  1. Игрок вызывает joinGame(roomId)                                         │
-│     └── Передает roomId комнаты для присоединения                           │
-│                                                                             │
-│  2. Подключение к Yjs документу                                             │
-│     └── LocalSyncProvider подключается к существующему документу            │
-│     └── Получаем все операции через синхронизацию                           │
-│                                                                             │
-│  3. Поиск операции create                                                   │
-│     └── Находим первую операцию type: 'create' в массиве                    │
-│     └── Извлекаем: width, height, minesNum, seed, roomId                    │
-│                                                                             │
-│  4. Перезапуск игры (restartGame)                                           │
-│     └── Очищаем текущее состояние (reset)                                   │
-│     └── Устанавливаем новые параметры                                       │
-│     └── Генерируем поле с тем же seed (детерминированно)                    │
-│                                                                             │
-│  5. Добавление операции join                                                │
-│     └── Создаем операцию type: 'join' с roomId                              │
-│     └── Добавляем в Yjs документ                                            │
-│                                                                             │
-│  6. Применение предыдущих операций                                          │
-│     └── Проходим по всем операциям в массиве                                │
-│     └── Применяем leftClick/rightClick через handleOperation                │
-│     └── Восстанавливаем состояние игры                                      │
-│                                                                             │
-│  7. Игра готова к использованию                                             │
-│     └── Новый игрок видит текущее состояние поля                            │
-│     └── Может делать ходы (операции синхронизируются)                       │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 5.2 Детали реализации
-
-**Важные моменты:**
-
-1. **Параметры игры берутся из первой операции `join`**
-   - `width`, `height`, `minesNum`, `seed`, `roomId` — все из первой операции
-   - Не передаются при вызове `joinGame()`, а извлекаются из Yjs документа
-
-2. **Детерминированная генерация поля**
-   - Одинаковый `seed` = одинаковое расположение мин
-   - Все клиенты генерируют идентичное поле
-
-3. **Последовательность операций**
-   - Сначала очищается Yjs документ (`crdtManager.clear()`)
-   - Затем `restartGame()` — создаем чистое поле
-   - Добавляем свою операцию `join`
-   - Применяем все `leftClick`/`rightClick` — восстанавливаем состояние
-   - Порядок важен: каждая операция изменяет состояние
-
-4. **Операция `join` — двойного назначения**
-   - Первая `join` операция создаёт игру и содержит все параметры
-   - Последующие `join` операции сигнализируют о присоединении игроков
-   - Не влияет напрямую на состояние поля, но используется для инициализации
-
-5. **Асинхронность и статусы**
-   - Метод `joinGame()` возвращает `Promise<void>`
-   - При начале присоединения устанавливается `gameStatus = 'Pending'`
-   - После восстановления состояния устанавливается `gameStatus = 'Playing'`
-
-### 5.3 Пример кода присоединения
+### 5.1 Новый метод applyOperation()
 
 ```typescript
-// Создание игры (первый игрок)
-const hostEngine = new GameEngine({
-  width: 100,
-  height: 100,
-  minesNum: 1000,
-  mode: 'seeded',
-  roomId: 'abc123'
-})
-// Автоматически добавляется операция join (создание игры)
+// src/engine/GameEngine.ts
 
-// Присоединение к игре (второй игрок)
-const clientEngine = new GameEngine({
-  mode: 'seeded',
-  player: new GamePlayer('Player 2')
-})
+export class GameEngine {
+  // ... существующий код ...
 
-// Присоединяемся к существующей игре
-await clientEngine.joinGame('abc123')
-// 1. Устанавливается gameStatus = 'PENDING'
-// 2. Получаем первую join операцию: {width: 100, height: 100, minesNum: 1000, seed: '...'}
-// 3. Очищаем Yjs документ и перезапускаем игру с этими параметрами
-// 4. Добавляем свою join операцию
-// 5. Применяем все предыдущие клики
-// 6. Устанавливается gameStatus = 'PLAYING'
-```
-
-### 5.4 Обработка ошибок при присоединении
-
-```typescript
-async joinGame(roomId: string): Promise<void> {
-  // Проверка: игра уже запущена?
-  if (this.isGameActive()) {
-    throw new Error('Cannot join: game already active')
+  /**
+   * Применить операцию от другого игрока (или себя при replay).
+   * GameRoom вызывает этот метод для всех операций.
+   * 
+   * GameEngine не знает об источнике операции (локальная или удалённая).
+   * Дедупликация и проверки выполняются в GameRoom.
+   * 
+   * @param op - Операция для применения
+   */
+  applyOperation(op: LeftClickOperation | RightClickOperation): void {
+    const index = op.y * this._width + op.x
+    
+    if (op.type === 'leftClick') {
+      this.reveal(index)
+    } else if (op.type === 'rightClick') {
+      this.flag(index)
+    }
   }
-  
-  // Подключаемся к документу
-  await this.connectToRoom(roomId)
-  
-  // Получаем операции
-  const operations = this.crdtManager.getOperations()
-  
-  // Проверка: есть ли операция join?
-  const firstJoinOp = operations.find(op => op.type === 'join')
-  if (!firstJoinOp) {
-    throw new Error(`Game not found in room ${roomId}`)
+
+  /**
+   * Перезапустить игру с новыми параметрами.
+   * Вызывается GameRoom при createGame/joinGame.
+   */
+  restart({ width, height, minesNum }: { 
+    width?: number
+    height?: number
+    minesNum?: number
+  } = {}): void {
+    // Существующая реализация restart
+    // Обновляет this._width, this._height, this._minesNum
+    // Генерирует новое поле через Web Worker
   }
-  
-  // Проверка: совпадают ли размеры поля (если уже заданы)?
-  if (this.config.width && this.config.width !== firstJoinOp.width) {
-    console.warn('Field width mismatch, using values from first join operation')
-  }
-  
-  // Перезапуск и применение операций...
 }
 ```
+
+### 5.2 Примечания по реализации
+
+**GameEngine.applyOperation():**
+- Не сохраняет операцию в CRDT (это делает GameRoom)
+- Не проверяет дубликаты (это делает GameRoom)
+- Просто применяет операцию к текущему состоянию поля
+- Использует существующие методы `reveal()` и `flag()`
+
+**GameEngine.restart():**
+- Уже существует в текущей реализации
+- GameRoom использует его для перезапуска с параметрами из join операции
+- Сохраняет roomId/seed для детерминированной генерации
 
 ---
 
 ## 6. Рекурсивное открытие ячеек (Flood Fill)
 
-### 5.1 Использование существующего метода reveal
+### 6.1 Использование существующего метода reveal
 
 При клике на пустую ячейку (без соседних мин) в классическом сапёре автоматически открываются соседние ячейки. **Важно:**
 
@@ -1105,16 +1102,16 @@ async joinGame(roomId: string): Promise<void> {
 ```typescript
 // Логика работы при reveal(x, y):
 // 
-// 1. Проверка на дубликат (если операция извне)
-// 2. Сохранение операции в Yjs (если локальный клик)
-// 3. Вызов существующего super.reveal(x, y), который:
+// 1. Проверка на дубликат (в GameRoom)
+// 2. Сохранение операции в Yjs (в GameRoom)
+// 3. Вызов gameEngine.reveal(index), который:
 //    - Открывает ячейку (x, y)
 //    - Если ячейка пустая (0), рекурсивно открывает соседей
 //    - Это уже реализовано в существующем GameEngine
 // 4. Проверка на проигрыш (если мина)
 ```
 
-### 5.2 Почему flood fill не сохраняется в Yjs
+### 6.2 Почему flood fill не сохраняется в Yjs
 
 | Параметр | Значение |
 |----------|----------|
@@ -1134,192 +1131,190 @@ async joinGame(roomId: string): Promise<void> {
 
 ---
 
-## 7. Интеграция с существующей архитектурой
+## 7. Интеграция с UI
 
-### 7.1 Изменения в GameEngine
+### 7.1 Изменения в UI слое
 
-```typescript
-// Конструктор принимает новые параметры
-interface GameEngineConfig {
-  // ... существующие поля ...
-  roomId?: string
-  player?: GamePlayer
-  syncProviderFactory?: SyncProviderFactory
-}
-
-// Модифицированные методы
-class GameEngine {
-  /** 
-   * Модифицирован: добавлен параметр isLocal
-   * При isLocal=true — сохраняет операцию в CRDT
-   */
-  reveal(x: number, y: number, isLocal?: boolean): void
-  
-  /** 
-   * Модифицирован: добавлен параметр isLocal
-   * При isLocal=true — сохраняет операцию в CRDT
-   * Проверяет, не открыта ли уже ячейка (приоритет открытия)
-   */
-  flag(x: number, y: number, isLocal?: boolean): void
-  
-  /** Получить текущего игрока */
-  getPlayer(): GamePlayer
-  
-  /** Получить ID комнаты */
-  getRoomId(): string
-  
-  /** Получить CRDT менеджер (для тестов) */
-  getCrdtManager(): CrdtManager
-  
-  /** Получить провайдер синхронизации */
-  getSyncProvider(): SyncProvider | null
-  
-  /** Сохранить игру */
-  save(): Promise<SaveData>
-  
-  /** Загрузить игру */
-  load(data: SaveData): Promise<void>
-}
-```
-
-### 7.2 Новые компоненты
-
-| Файл | Назначение |
-|------|------------|
-| `src/types/operations.ts` | TypeScript интерфейсы операций |
-| `src/core/eventBus.ts` | Простой Pub/Sub для тестов |
-| `src/engine/GamePlayer.ts` | Класс игрока (id, name) |
-| `src/engine/CrdtManager.ts` | Обёртка над Yjs |
-| `src/engine/SyncProvider.ts` | Интерфейс провайдера синхронизации |
-| `src/engine/LocalSyncProvider.ts` | Локальный провайдер для тестов |
-
-### 7.3 Модификации существующих файлов
-
-| Файл | Изменения |
-|------|-----------|
-| `src/engine/GameEngine.ts` | Интеграция CRDT, генерация операций |
-| `src/engine/SaveManager.ts` | Новый формат сохранения (.mine) |
-| `src/engine/GameEngine.spec.ts` | Тесты синхронизации |
-
----
-
-## 8. Критерии приёмки
-
-- [ ] **Архитектура**: Все новые модули созданы по спецификации
-- [ ] **Типы**: TypeScript интерфейсы соответствуют спецификации
-- [ ] **Сохранение**: Формат .mine с Magic Header + JSON + Yjs
-- [ ] **Синхронизация**: Два инстанса GameEngine синхронизируют операции
-- [ ] **Дедупликация**: Дубликаты операций не применяются
-- [ ] **Конфликты**: Открытие приоритетнее флага
-- [ ] **Flood Fill**: Рекурсивное открытие выполняется локально
-- [ ] **Game Over**: Синхронизируется между всеми клиентами
-- [ ] **Присоединение**: Процесс joinGame работает корректно — параметры берутся из первой join операции
-- [ ] **Загрузка**: Процесс загрузки работает корректно — параметры берутся из первой join операции, затем replay всех операций
-- [ ] **Совместимость**: LocalSyncProvider можно заменить на WebrtcProvider
-- [ ] **Тесты**: Все существующие тесты проходят + новые интеграционные
-
-
----
-
-## Приложение А: Варианты дизайна операций
-
-При проектировании CRDT-архитектуры рассматривались два подхода к операциям создания/присоединения к игре.
-
-### Вариант 1: Разделённые операции `create` и `join`
+UI должен работать только с GameRoom, не напрямую с GameEngine:
 
 ```typescript
-interface CreateGameOperation {
-  type: 'create'
-  roomId: string
-  width: number
-  height: number
-  minesNum: number
-  seed: string
-  playerId: string
-  timestamp: number
-}
+// BEFORE (UI работает с GameEngine напрямую)
+const engine = new GameEngine({ scheduler, ... })
 
-interface JoinGameOperation {
-  type: 'join'
-  roomId: string
-  playerId: string
-  timestamp: number
-}
+// В обработчике клика:
+engine.reveal(index)
+
+// Подписка на изменения:
+engine.subscribe(() => updateUI(engine.getGameState()))
 ```
-
-**Плюсы:**
-- Чёткое разделение ответственности: `create` содержит параметры, `join` — только сигнал
-- Минимальный размер операции `join` (нет дублирования параметров)
-- Семантически понятно: «создать» и «присоединиться» — разные действия
-
-**Минусы:**
-- Две разные операции для похожей логики (инициализация/перезапуск игры)
-- Необходимость обработки обоих типов в `handleOperation`
-- При присоединении нужно искать сначала `create`, затем применять остальное
-
----
-
-### Вариант 2: Унифицированная операция `join` (выбранный)
 
 ```typescript
-interface JoinGameOperation {
-  type: 'join'
-  roomId: string
-  width: number
-  height: number
-  minesNum: number
-  seed: string
-  playerId: string
-  timestamp: number
-}
+// AFTER (UI работает с GameRoom)
+const room = new GameRoom({ 
+  scheduler, 
+  playerName: 'Alice',
+  gameParams: { width: 100, height: 100, minesNum: 1000 }
+})
+
+await room.createGame({ width: 100, height: 100, minesNum: 1000 })
+
+// В обработчике клика:
+room.handleLeftClick(x, y)
+
+// Подписка на изменения:
+room.subscribe((state) => updateUI(state))
 ```
 
-**Плюсы:**
-- ✅ Одна операция для всех случаев инициализации
-- ✅ Первая `join` создаёт игру, последующие — присоединяют игроков
-- ✅ Упрощённая логика: всегда ищем первую `join` для параметров
-- ✅ Единый код для создания и присоединения к игре
-- ✅ Операция `join` самодостаточна — содержит все необходимые параметры
+### 7.2 Сценарии использования
 
-**Минусы:**
-- Небольшое дублирование параметров в каждой операции `join`
-- Менее явная семантика: `join` используется и для создания, и для присоединения
-- Больший размер операции по сравнению с «чистой» join из Варианта 1
+**Single-player:**
+```typescript
+const room = new GameRoom({ scheduler: new Scheduler() })
+await room.createGame({ width: 50, height: 50, minesNum: 100 })
+// GameRoom работает без синхронизации
+```
 
----
+**Multiplayer (Host):**
+```typescript
+const room = new GameRoom({ 
+  scheduler: new Scheduler(),
+  syncProviderFactory: createWebRtcProvider
+})
+await room.createGame({ width: 100, height: 100, minesNum: 1000 })
+const roomId = room.getRoomId() // Поделиться с другими игроками
+```
 
-### Сравнение
-
-| Аспект | Вариант 1 (create + join) | Вариант 2 (только join) |
-|--------|---------------------------|-------------------------|
-| **Количество типов операций** | 2 | 1 |
-| **Размер операции join** | ~50 байт | ~100 байт |
-| **Сложность логики** | Средняя (два case в switch) | Низкая (один case) |
-| **Понятность** | Высокая (явное разделение) | Средняя (перегрузка смысла) |
-| **Гибкость** | Низкая (жёсткая последовательность) | Высокая (любой join может быть первым) |
-| **Код присоединения** | Искать create, применять остальное | Искать первую join, применять остальное |
-
----
-
-### Обоснование выбора
-
-Выбран **Вариант 2 (только join)** по следующим причинам:
-
-1. **Простота реализации**: Единая логика для создания и присоединения
-2. **Меньше кода**: Не нужно обрабатывать отдельный тип `create`
-3. **Гибкость**: Любой игрок может теоретически «создать» игру, просто добавив первую `join`
-4. **Самодостаточность**: Каждая операция `join` содержит полную информацию для восстановления игры
-5. **Единообразие**: При загрузке из файла и при присоединении по сети используется одинаковая логика
-
-> **Важно**: Дополнительный размер операции `join` (~50 байт) не критичен даже для 10,000 операций — это всего ~500KB дополнительных данных.
+**Multiplayer (Client):**
+```typescript
+const room = new GameRoom({ 
+  scheduler: new Scheduler(),
+  playerName: 'Bob',
+  syncProviderFactory: createWebRtcProvider
+})
+await room.joinGame(roomId) // roomId от хоста
+```
 
 ---
 
-### История решения
+## 8. Тестирование
 
-Изначально в спецификации был **Вариант 1** с операциями `create` и `join`. После анализа выяснилось, что:
-- Операция `create` и первая операция `join` выполняют схожую роль — инициализацию игры
-- Разделение усложняет код без значимых преимуществ
-- Унификация в одну операцию `join` упрощает понимание и поддержку
+### 8.1 Структура тестов
 
-Решение принято: **отказаться от операции `create`, использовать только `join` с полными параметрами**.
+```
+src/
+├── room/
+│   ├── GameRoom.spec.ts           # Интеграционные тесты GameRoom
+│   ├── CrdtManager.spec.ts        # Тесты CRDT операций
+│   └── LocalSyncProvider.spec.ts  # Тесты провайдера
+├── engine/
+│   └── GameEngine.spec.ts         # Существующие тесты (без изменений)
+└── core/
+    └── eventBus.spec.ts           # Тесты EventBus
+```
+
+### 8.2 Пример теста синхронизации
+
+```typescript
+// src/room/GameRoom.spec.ts
+
+describe('GameRoom CRDT Synchronization', () => {
+  it('should synchronize leftClick between two rooms', async () => {
+    // Создаём общий EventBus для тестирования
+    const eventBus = new EventBus()
+    
+    // Создаём фабрику провайдера
+    const createProvider = (roomId: string, doc: Y.Doc) => {
+      return new LocalSyncProvider(roomId, doc, eventBus)
+    }
+    
+    // Создаём первую комнату (Host)
+    const room1 = new GameRoom({
+      scheduler: new Scheduler(),
+      playerName: 'Alice',
+      syncProviderFactory: createProvider,
+    })
+    
+    await room1.createGame({ width: 10, height: 10, minesNum: 10 })
+    const roomId = room1.getRoomId()!
+    
+    // Создаём вторую комнату (Client)
+    const room2 = new GameRoom({
+      scheduler: new Scheduler(),
+      playerName: 'Bob',
+      syncProviderFactory: createProvider,
+    })
+    
+    await room2.joinGame(roomId)
+    
+    // Проверяем, что обе комнаты имеют одинаковое начальное состояние
+    expect(room1.getGameState().tilesLeft).toBe(room2.getGameState().tilesLeft)
+    
+    // Игрок 1 открывает ячейку
+    room1.handleLeftClick(5, 5)
+    
+    // Проверяем, что операция синхронизировалась
+    const state1 = room1.getGameState()
+    const state2 = room2.getGameState()
+    
+    expect(state1.tilesLeft).toBe(state2.tilesLeft)
+    expect(state1.visibleBoard).toEqual(state2.visibleBoard)
+  })
+  
+  it('should resolve flag vs reveal conflict in favor of reveal', async () => {
+    // Тест конфликта: флаг vs открытие
+    // Ожидаемый результат: открытие побеждает
+  })
+  
+  it('should deduplicate operations', async () => {
+    // Тест дедупликации
+    // Одинаковая операция не должна применяться дважды
+  })
+  
+  it('should handle offline mode and sync on reconnect', async () => {
+    // Тест offline режима
+    // 1. Пауза синхронизации
+    // 2. Несколько операций
+    // 3. Возобновление синхронизации
+    // 4. Проверка, что все операции применились
+  })
+})
+```
+
+---
+
+## 9. План реализации
+
+### Phase 1: Подготовка (без изменений в GameEngine)
+1. Создать `src/types/operations.ts` — типы операций
+2. Создать `src/room/GamePlayer.ts` — класс игрока
+3. Создать `src/core/eventBus.ts` — EventBus для тестов
+4. Создать `src/room/SyncProvider.ts` — интерфейс
+
+### Phase 2: CRDT инфраструктура
+5. Создать `src/room/CrdtManager.ts` — обёртка над Yjs
+6. Создать `src/room/LocalSyncProvider.ts` — тестовый провайдер
+7. Тесты для CrdtManager и LocalSyncProvider
+
+### Phase 3: GameRoom (основной класс)
+8. Создать `src/room/GameRoom.ts`
+9. Интеграция с GameEngine
+10. Интеграционные тесты GameRoom + GameEngine
+
+### Phase 4: Изменения в GameEngine
+11. Добавить метод `applyOperation()` в GameEngine
+12. Убедиться, что существующие тесты проходят
+13. Добавить тесты для `applyOperation()`
+
+### Phase 5: Сохранение/загрузка
+14. Обновить `SaveManager` для формата версии 2
+15. Добавить метод `load()` в GameRoom
+16. Тесты сохранения/загрузки
+
+### Phase 6: UI интеграция
+17. Обновить UI для работы с GameRoom вместо GameEngine
+18. Тесты полного сценария
+
+### Phase 7: Финализация
+19. Проверка типов: `pnpm lint:types`
+20. Линтер: `pnpm lint:fix`
+21. Все тесты: `pnpm test`
