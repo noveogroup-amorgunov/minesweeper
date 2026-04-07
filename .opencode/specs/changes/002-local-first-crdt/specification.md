@@ -109,11 +109,14 @@ export interface BaseOperation {
 }
 
 /**
- * Операция создания игры
- * Первая операция в любой игре
+ * Операция присоединения к игре / создания игры
+ * Первая операция в последовательности создаёт игру
+ * Последующие операции присоединяют новых игроков
  */
-export interface CreateGameOperation extends BaseOperation {
-  type: 'create'
+export interface JoinGameOperation extends BaseOperation {
+  type: 'join'
+  /** ID комнаты/игры */
+  roomId: string
   /** Ширина поля */
   width: number
   /** Высота поля */
@@ -122,22 +125,6 @@ export interface CreateGameOperation extends BaseOperation {
   minesNum: number
   /** Seed для генерации поля */
   seed: string
-  /** ID комнаты/игры */
-  roomId: string
-}
-
-/**
- * Операция присоединения к игре
- */
-export interface JoinGameOperation extends BaseOperation {
-  type: 'join'
-  /** ID комнаты для присоединения */
-  roomId: string
-  /** Seed для генерации поля (должен совпадать с create) */
-  seed: string
-  width: number
-  height: number
-  minesNum: number
 }
 
 /**
@@ -166,7 +153,6 @@ export interface RightClickOperation extends BaseOperation {
  * Объединённый тип всех операций
  */
 export type GameOperation =
-  | CreateGameOperation
   | JoinGameOperation
   | LeftClickOperation
   | RightClickOperation
@@ -200,7 +186,7 @@ import type { GameOperation } from '../types/operations'
  *
  * Каждая операция хранится как Y.Map с полями:
  * {
- *   type: string      // 'create' | 'join' | 'leftClick' | 'rightClick'
+ *   type: string      // 'join' | 'leftClick' | 'rightClick'
  *   x: number?        // только для click операций
  *   y: number?        // только для click операций
  *   playerId: string
@@ -523,7 +509,7 @@ function serializeSave(data: SaveData): Uint8Array {
 
 **Ключевые моменты:**
 
-1. **Параметры из `create` операции**: Как и при `joinGame`, все параметры игры (width, height, minesNum, seed) берутся из первой операции `create`, а не из JSON metadata. JSON metadata используется только для быстрой проверки и совместимости.
+1. **Параметры из первой `join` операции**: Как и при `joinGame`, все параметры игры (width, height, minesNum, seed) берутся из первой операции `join`, а не из JSON metadata. JSON metadata используется только для быстрой проверки и совместимости.
 
 2. **Детерминированное восстановление**: Тот же `seed` гарантирует идентичное поле на всех клиентах.
 
@@ -538,23 +524,23 @@ async load(saveData: SaveData): Promise<void> {
   // 2. Получаем все операции
   const operations = this.crdtManager.getOperations()
   
-  // 3. Находим create операцию
-  const createOp = operations.find(op => op.type === 'create') as CreateGameOperation | undefined
+  // 3. Находим первую join операцию
+  const joinOp = operations.find(op => op.type === 'join') as JoinGameOperation | undefined
   
-  if (!createOp) {
-    throw new Error('Invalid save file: no create operation found')
+  if (!joinOp) {
+    throw new Error('Invalid save file: no join operation found')
   }
   
-  // 4. Перезапускаем игру с параметрами из create
+  // 4. Перезапускаем игру с параметрами из первой join
   this.restartGame({
-    width: createOp.width,
-    height: createOp.height,
-    minesNum: createOp.minesNum,
-    seed: createOp.seed,
-    roomId: createOp.roomId
+    width: joinOp.width,
+    height: joinOp.height,
+    minesNum: joinOp.minesNum,
+    seed: joinOp.seed,
+    roomId: joinOp.roomId
   })
   
-  // 5. Применяем все игровые операции
+  // 5. Применяем все игровые операции (кроме join)
   for (const op of operations) {
     if (op.type === 'leftClick' || op.type === 'rightClick') {
       this.handleOperation(op)
@@ -774,15 +760,15 @@ export class GameEngine {
       )
     }
     
-    // Добавляем начальную операцию создания игры
+    // Добавляем начальную операцию присоединения (создания игры)
     this.crdtManager.addOperation({
-      type: 'create',
+      type: 'join',
+      roomId: this.crdtManager.getRoomId(),
+      playerId: this.player.id,
       width: config.width,
       height: config.height,
       minesNum: config.minesNum,
       seed: this.seed,
-      roomId: this.crdtManager.getRoomId(),
-      playerId: this.player.id,
       timestamp: Date.now()
     })
   }
@@ -803,12 +789,9 @@ export class GameEngine {
         // Существующий метод flag переключает состояние флага
         this.flag(op.x, op.y, false)
         break
-      case 'create':
-        // Игнорируем create — используем только при инициализации
-        // Параметры уже получены при подключении
-        break
       case 'join':
-        // Игнорируем join — это просто сигнал о присоединении
+        // Игнорируем join — используем только для инициализации/присоединения
+        // Параметры игры получаются из первой join операции
         break
     }
   }
@@ -818,42 +801,53 @@ export class GameEngine {
    * Вызывается когда игрок хочет присоединиться к комнате
    */
   async joinGame(roomId: string): Promise<void> {
-    // 1. Подключаемся к существующему Yjs документу
-    // (через LocalSyncProvider или другой провайдер)
+    // 1. Устанавливаем статус ожидания
+    this.gameStatus = 'PENDING'
     
-    // 2. Ждем получения всех операций
+    // 2. Подключаемся к существующему Yjs документу (async)
+    await this.connectToRoom(roomId)
+    
+    // 3. Получаем все операции
     const operations = this.crdtManager.getOperations()
     
-    // 3. Находим первую операцию create
-    const createOp = operations.find(op => op.type === 'create') as CreateGameOperation | undefined
+    // 4. Находим первую операцию join
+    const firstJoinOp = operations.find(op => op.type === 'join') as JoinGameOperation | undefined
     
-    if (!createOp) {
-      throw new Error('Game not found: no create operation in document')
+    if (!firstJoinOp) {
+      throw new Error('Game not found: no join operation in document')
     }
     
-    // 4. Перезапускаем игру с параметрами из create
+    // 5. Очищаем Yjs документ и перезапускаем игру с параметрами из первой join
+    this.crdtManager.clear()
     this.restartGame({
-      width: createOp.width,
-      height: createOp.height,
-      minesNum: createOp.minesNum,
-      seed: createOp.seed,
-      roomId: createOp.roomId
+      width: firstJoinOp.width,
+      height: firstJoinOp.height,
+      minesNum: firstJoinOp.minesNum,
+      seed: firstJoinOp.seed,
+      roomId: firstJoinOp.roomId
     })
     
-    // 5. Добавляем свою операцию join
+    // 6. Добавляем свою операцию join
     this.crdtManager.addOperation({
       type: 'join',
-      roomId: createOp.roomId,
+      roomId: firstJoinOp.roomId,
       playerId: this.player.id,
+      width: firstJoinOp.width,
+      height: firstJoinOp.height,
+      minesNum: firstJoinOp.minesNum,
+      seed: firstJoinOp.seed,
       timestamp: Date.now()
     })
     
-    // 6. Применяем все предыдущие операции (кроме create)
+    // 7. Применяем все предыдущие операции (кроме join)
     for (const op of operations) {
       if (op.type === 'leftClick' || op.type === 'rightClick') {
         this.handleOperation(op)
       }
     }
+    
+    // 8. Игра готова
+    this.gameStatus = 'PLAYING'
   }
 
   /**
@@ -1012,23 +1006,30 @@ const engine = new GameEngine({
 
 **Важные моменты:**
 
-1. **Параметры игры берутся из операции `create`**
-   - `width`, `height`, `minesNum`, `seed` — все из первой операции
-   - Не передаются при вызове `joinGame()`, а извлекаются из Yjs
+1. **Параметры игры берутся из первой операции `join`**
+   - `width`, `height`, `minesNum`, `seed`, `roomId` — все из первой операции
+   - Не передаются при вызове `joinGame()`, а извлекаются из Yjs документа
 
 2. **Детерминированная генерация поля**
    - Одинаковый `seed` = одинаковое расположение мин
    - Все клиенты генерируют идентичное поле
 
 3. **Последовательность операций**
-   - Сначала `restartGame()` — создаем чистое поле
-   - Затем применяем `leftClick`/`rightClick` — восстанавливаем состояние
+   - Сначала очищается Yjs документ (`crdtManager.clear()`)
+   - Затем `restartGame()` — создаем чистое поле
+   - Добавляем свою операцию `join`
+   - Применяем все `leftClick`/`rightClick` — восстанавливаем состояние
    - Порядок важен: каждая операция изменяет состояние
 
-4. **Операция `join` — информационная**
-   - Сигнализирует о присоединении нового игрока
-   - Не влияет на состояние игры
-   - Может использоваться для UI (список игроков в будущем)
+4. **Операция `join` — двойного назначения**
+   - Первая `join` операция создаёт игру и содержит все параметры
+   - Последующие `join` операции сигнализируют о присоединении игроков
+   - Не влияет напрямую на состояние поля, но используется для инициализации
+
+5. **Асинхронность и статусы**
+   - Метод `joinGame()` возвращает `Promise<void>`
+   - При начале присоединения устанавливается `gameStatus = 'Pending'`
+   - После восстановления состояния устанавливается `gameStatus = 'Playing'`
 
 ### 5.3 Пример кода присоединения
 
@@ -1041,7 +1042,7 @@ const hostEngine = new GameEngine({
   mode: 'seeded',
   roomId: 'abc123'
 })
-// Автоматически добавляется операция create
+// Автоматически добавляется операция join (создание игры)
 
 // Присоединение к игре (второй игрок)
 const clientEngine = new GameEngine({
@@ -1051,10 +1052,12 @@ const clientEngine = new GameEngine({
 
 // Присоединяемся к существующей игре
 await clientEngine.joinGame('abc123')
-// 1. Получаем create операцию: {width: 100, height: 100, minesNum: 1000, seed: '...'}
-// 2. Перезапускаем игру с этими параметрами
-// 3. Добавляем join операцию
-// 4. Применяем все предыдущие клики
+// 1. Устанавливается gameStatus = 'PENDING'
+// 2. Получаем первую join операцию: {width: 100, height: 100, minesNum: 1000, seed: '...'}
+// 3. Очищаем Yjs документ и перезапускаем игру с этими параметрами
+// 4. Добавляем свою join операцию
+// 5. Применяем все предыдущие клики
+// 6. Устанавливается gameStatus = 'PLAYING'
 ```
 
 ### 5.4 Обработка ошибок при присоединении
@@ -1072,15 +1075,15 @@ async joinGame(roomId: string): Promise<void> {
   // Получаем операции
   const operations = this.crdtManager.getOperations()
   
-  // Проверка: есть ли операция create?
-  const createOp = operations.find(op => op.type === 'create')
-  if (!createOp) {
+  // Проверка: есть ли операция join?
+  const firstJoinOp = operations.find(op => op.type === 'join')
+  if (!firstJoinOp) {
     throw new Error(`Game not found in room ${roomId}`)
   }
   
   // Проверка: совпадают ли размеры поля (если уже заданы)?
-  if (this.config.width && this.config.width !== createOp.width) {
-    console.warn('Field width mismatch, using values from create operation')
+  if (this.config.width && this.config.width !== firstJoinOp.width) {
+    console.warn('Field width mismatch, using values from first join operation')
   }
   
   // Перезапуск и применение операций...
@@ -1210,7 +1213,113 @@ class GameEngine {
 - [ ] **Конфликты**: Открытие приоритетнее флага
 - [ ] **Flood Fill**: Рекурсивное открытие выполняется локально
 - [ ] **Game Over**: Синхронизируется между всеми клиентами
-- [ ] **Присоединение**: Процесс joinGame работает корректно — параметры берутся из create операции
-- [ ] **Загрузка**: Процесс загрузки работает корректно — параметры берутся из create операции, затем replay всех операций
+- [ ] **Присоединение**: Процесс joinGame работает корректно — параметры берутся из первой join операции
+- [ ] **Загрузка**: Процесс загрузки работает корректно — параметры берутся из первой join операции, затем replay всех операций
 - [ ] **Совместимость**: LocalSyncProvider можно заменить на WebrtcProvider
 - [ ] **Тесты**: Все существующие тесты проходят + новые интеграционные
+
+
+---
+
+## Приложение А: Варианты дизайна операций
+
+При проектировании CRDT-архитектуры рассматривались два подхода к операциям создания/присоединения к игре.
+
+### Вариант 1: Разделённые операции `create` и `join`
+
+```typescript
+interface CreateGameOperation {
+  type: 'create'
+  roomId: string
+  width: number
+  height: number
+  minesNum: number
+  seed: string
+  playerId: string
+  timestamp: number
+}
+
+interface JoinGameOperation {
+  type: 'join'
+  roomId: string
+  playerId: string
+  timestamp: number
+}
+```
+
+**Плюсы:**
+- Чёткое разделение ответственности: `create` содержит параметры, `join` — только сигнал
+- Минимальный размер операции `join` (нет дублирования параметров)
+- Семантически понятно: «создать» и «присоединиться» — разные действия
+
+**Минусы:**
+- Две разные операции для похожей логики (инициализация/перезапуск игры)
+- Необходимость обработки обоих типов в `handleOperation`
+- При присоединении нужно искать сначала `create`, затем применять остальное
+
+---
+
+### Вариант 2: Унифицированная операция `join` (выбранный)
+
+```typescript
+interface JoinGameOperation {
+  type: 'join'
+  roomId: string
+  width: number
+  height: number
+  minesNum: number
+  seed: string
+  playerId: string
+  timestamp: number
+}
+```
+
+**Плюсы:**
+- ✅ Одна операция для всех случаев инициализации
+- ✅ Первая `join` создаёт игру, последующие — присоединяют игроков
+- ✅ Упрощённая логика: всегда ищем первую `join` для параметров
+- ✅ Единый код для создания и присоединения к игре
+- ✅ Операция `join` самодостаточна — содержит все необходимые параметры
+
+**Минусы:**
+- Небольшое дублирование параметров в каждой операции `join`
+- Менее явная семантика: `join` используется и для создания, и для присоединения
+- Больший размер операции по сравнению с «чистой» join из Варианта 1
+
+---
+
+### Сравнение
+
+| Аспект | Вариант 1 (create + join) | Вариант 2 (только join) |
+|--------|---------------------------|-------------------------|
+| **Количество типов операций** | 2 | 1 |
+| **Размер операции join** | ~50 байт | ~100 байт |
+| **Сложность логики** | Средняя (два case в switch) | Низкая (один case) |
+| **Понятность** | Высокая (явное разделение) | Средняя (перегрузка смысла) |
+| **Гибкость** | Низкая (жёсткая последовательность) | Высокая (любой join может быть первым) |
+| **Код присоединения** | Искать create, применять остальное | Искать первую join, применять остальное |
+
+---
+
+### Обоснование выбора
+
+Выбран **Вариант 2 (только join)** по следующим причинам:
+
+1. **Простота реализации**: Единая логика для создания и присоединения
+2. **Меньше кода**: Не нужно обрабатывать отдельный тип `create`
+3. **Гибкость**: Любой игрок может теоретически «создать» игру, просто добавив первую `join`
+4. **Самодостаточность**: Каждая операция `join` содержит полную информацию для восстановления игры
+5. **Единообразие**: При загрузке из файла и при присоединении по сети используется одинаковая логика
+
+> **Важно**: Дополнительный размер операции `join` (~50 байт) не критичен даже для 10,000 операций — это всего ~500KB дополнительных данных.
+
+---
+
+### История решения
+
+Изначально в спецификации был **Вариант 1** с операциями `create` и `join`. После анализа выяснилось, что:
+- Операция `create` и первая операция `join` выполняют схожую роль — инициализацию игры
+- Разделение усложняет код без значимых преимуществ
+- Унификация в одну операцию `join` упрощает понимание и поддержку
+
+Решение принято: **отказаться от операции `create`, использовать только `join` с полными параметрами**.
