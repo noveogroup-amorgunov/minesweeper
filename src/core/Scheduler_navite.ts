@@ -6,7 +6,7 @@ declare global {
     scheduler: {
       postTask: (
         task: () => void,
-        options: { priority: 'background', signal?: AbortSignal }
+        options: { priority: 'background', signal?: AbortSignal },
       ) => void
     }
   }
