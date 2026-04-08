@@ -17,7 +17,8 @@
     "react-dom": "^19.1.0",
     "react-scan": "^0.4.3",
     "react95": "^4.0.0",
-    "styled-components": "^6.1.19"
+    "styled-components": "^6.1.19",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",

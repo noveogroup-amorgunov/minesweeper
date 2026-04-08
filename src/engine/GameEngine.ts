@@ -24,6 +24,23 @@ interface InitArgs {
 
 export type GameStatus = 'READY' | 'PENDING' | 'PLAYING' | 'DEAD' | 'WIN'
 
+/**
+ * Интерфейс состояния игры
+ */
+export interface GameState {
+  visibleBoard: Array<{ value: number, index: number }>
+  offsetX: number
+  offsetY: number
+  gameStatus: GameStatus
+  minesLeft: number
+  minesNum: number
+  tilesLeft: number
+  boardByteLength: number
+  height: number
+  width: number
+  gameTimeSeconds: number
+}
+
 export class GameEngine {
   private _width: number = INITIAL_BOARD_WIDTH
   private _height: number = INITIAL_BOARD_HEIGHT

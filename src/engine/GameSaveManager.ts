@@ -3,14 +3,24 @@ import { deleteFile, fileExists, listFiles, readFile, writeFile } from '../core/
 import { SaveFileCorruptedError, SaveFileError, SaveValidationError, SaveVersionError } from './errors'
 
 /**
- * Magic header bytes: "MINESWP\0"
+ * Magic header bytes for v1: "MINESWP\0"
  */
 const MAGIC_HEADER = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x57, 0x50, 0x00])
 
 /**
- * Current save file format version
+ * Magic header bytes for v2 (CRDT): "MINESCRD"
+ */
+const MAGIC_HEADER_V2 = new Uint8Array([0x4D, 0x49, 0x4E, 0x45, 0x53, 0x43, 0x52, 0x44])
+
+/**
+ * Current save file format version (v1)
  */
 const CURRENT_VERSION = 0x01
+
+/**
+ * Version 2 format identifier
+ */
+const VERSION_V2 = 2
 
 /**
  * Default filename for save file
@@ -22,6 +32,11 @@ const DEFAULT_FILENAME = 'savegame.dat'
  */
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
+
+/**
+ * Regex for matching savegame files
+ */
+const SAVEGAME_FILE_REGEX = /^savegame.*\.dat$/
 
 /**
  * Manager for saving and loading game state to/from OPFS
@@ -293,7 +308,7 @@ export class GameSaveManager {
 
     try {
       // List files matching savegame pattern
-      const files = await listFiles(/^savegame.*\.dat$/)
+      const files = await listFiles(SAVEGAME_FILE_REGEX)
 
       for (const file of files) {
         if (file === DEFAULT_FILENAME) {
@@ -313,5 +328,181 @@ export class GameSaveManager {
     catch {
       return slots
     }
+  }
+
+  /**
+   * ============================================================================
+   * VERSION 2 (CRDT) FORMAT SUPPORT
+   * ============================================================================
+   */
+
+  /**
+   * Metadata for save file version 2 (JSON)
+   */
+  static get SAVE_MAGIC_HEADER_V2(): Uint8Array {
+    return MAGIC_HEADER_V2
+  }
+
+  /**
+   * Version 2 format identifier
+   */
+  static get SAVE_VERSION_V2(): number {
+    return VERSION_V2
+  }
+
+  /**
+   * Serialize data to version 2 binary format
+   * Format:
+   *   - magic (8 bytes): "MINESCRD"
+   *   - version (2 bytes, uint16le): 0x0002
+   *   - jsonLen (4 bytes, uint32le)
+   *   - jsonMetadata (N bytes, UTF-8 JSON)
+   *   - yjsUpdateLen (4 bytes, uint32le)
+   *   - yjsStateUpdate (M bytes, binary)
+   */
+  static serializeV2(metadata: Record<string, unknown>, yjsStateUpdate: Uint8Array): Uint8Array {
+    // Serialize metadata to JSON
+    const metadataJson = JSON.stringify(metadata)
+    const metadataBytes = textEncoder.encode(metadataJson)
+
+    // Calculate total size
+    const totalSize = 8 + 2 + 4 + metadataBytes.length + 4 + yjsStateUpdate.length
+
+    // Create buffer
+    const buffer = new Uint8Array(totalSize)
+    let offset = 0
+
+    // Write magic header
+    buffer.set(MAGIC_HEADER_V2, offset)
+    offset += 8
+
+    // Write version (2 bytes, little-endian)
+    const versionView = new DataView(buffer.buffer, offset, 2)
+    versionView.setUint16(0, VERSION_V2, true)
+    offset += 2
+
+    // Write JSON length (4 bytes, little-endian)
+    const jsonLenView = new DataView(buffer.buffer, offset, 4)
+    jsonLenView.setUint32(0, metadataBytes.length, true)
+    offset += 4
+
+    // Write JSON metadata
+    buffer.set(metadataBytes, offset)
+    offset += metadataBytes.length
+
+    // Write Yjs update length (4 bytes, little-endian)
+    const yjsLenView = new DataView(buffer.buffer, offset, 4)
+    yjsLenView.setUint32(0, yjsStateUpdate.length, true)
+    offset += 4
+
+    // Write Yjs state update
+    buffer.set(yjsStateUpdate, offset)
+
+    return buffer
+  }
+
+  /**
+   * Deserialize version 2 binary format
+   * @throws SaveFileCorruptedError on invalid format
+   * @throws SaveVersionError if version is not 2
+   */
+  static deserializeV2(buffer: Uint8Array): { metadata: Record<string, unknown>, yjsStateUpdate: Uint8Array } {
+    // Validate minimum size: magic (8) + version (2) + jsonLen (4) + yjsLen (4) = 18 bytes minimum
+    if (buffer.length < 18) {
+      throw new SaveFileCorruptedError('Save file v2 is too small')
+    }
+
+    let offset = 0
+
+    // Validate magic header
+    for (let i = 0; i < 8; i++) {
+      if (buffer[offset + i] !== MAGIC_HEADER_V2[i]) {
+        throw new SaveFileCorruptedError('Invalid magic header for v2 format')
+      }
+    }
+    offset += 8
+
+    // Check version
+    const versionView = new DataView(buffer.buffer, offset, 2)
+    const version = versionView.getUint16(0, true)
+    offset += 2
+
+    if (version !== VERSION_V2) {
+      throw new SaveVersionError(version)
+    }
+
+    // Read JSON length
+    const jsonLenView = new DataView(buffer.buffer, offset, 4)
+    const jsonLen = jsonLenView.getUint32(0, true)
+    offset += 4
+
+    // Validate JSON length
+    if (offset + jsonLen > buffer.length - 4) { // -4 for yjsLen
+      throw new SaveFileCorruptedError('Invalid JSON length in v2 format')
+    }
+
+    // Parse JSON metadata
+    const metadataBytes = buffer.slice(offset, offset + jsonLen)
+    offset += jsonLen
+
+    let metadata: Record<string, unknown>
+    try {
+      const metadataJson = textDecoder.decode(metadataBytes)
+      metadata = JSON.parse(metadataJson) as Record<string, unknown>
+    }
+    catch (error) {
+      throw new SaveFileCorruptedError('Failed to parse v2 metadata JSON', error)
+    }
+
+    // Read Yjs update length
+    const yjsLenView = new DataView(buffer.buffer, offset, 4)
+    const yjsLen = yjsLenView.getUint32(0, true)
+    offset += 4
+
+    // Validate Yjs update length
+    if (offset + yjsLen > buffer.length) {
+      throw new SaveFileCorruptedError('Invalid Yjs update length in v2 format')
+    }
+
+    // Extract Yjs state update
+    const yjsStateUpdate = buffer.slice(offset, offset + yjsLen)
+
+    return { metadata, yjsStateUpdate }
+  }
+
+  /**
+   * Detect save file version
+   * Returns 1 for v1 format, 2 for v2 format, or 'unknown'
+   */
+  static detectVersion(buffer: Uint8Array): 1 | 2 | 'unknown' {
+    if (buffer.length < 8) {
+      return 'unknown'
+    }
+
+    // Check for v2 magic header
+    let isV2 = true
+    for (let i = 0; i < 8; i++) {
+      if (buffer[i] !== MAGIC_HEADER_V2[i]) {
+        isV2 = false
+        break
+      }
+    }
+    if (isV2) {
+      return 2
+    }
+
+    // Check for v1 magic header
+    let isV1 = true
+    for (let i = 0; i < 8; i++) {
+      if (buffer[i] !== MAGIC_HEADER[i]) {
+        isV1 = false
+        break
+      }
+    }
+    if (isV1) {
+      return 1
+    }
+
+    return 'unknown'
   }
 }
